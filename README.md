@@ -8,15 +8,18 @@ No RAPORT account or service is required. Tested on OpenEMR 8.0.0.3.
 
 ## Install
 
-1. Put the module in `interface/modules/custom_modules/oe-module-raport-api`, with
-   Composer from the OpenEMR root (`composer require raport/oe-module-raport-api`)
-   or by extracting a release archive there.
+1. Download `oe-module-raport-api-<version>.zip` from the
+   [latest release](https://github.com/Raport-Health/oe-module-raport-api/releases/latest)
+   and extract it into `interface/modules/custom_modules/`. That creates
+   `interface/modules/custom_modules/oe-module-raport-api`. No Composer step is needed.
 2. In Administration > Modules > Manage Modules, register, install and enable it.
 3. Turn on the FHIR API and its system scopes (`rest_fhir_api` and
    `rest_system_scopes_api`, under Administration > Config > Connectors).
    `site_addr_oath` must be the site's public base URL.
 4. Register a private-key JWT system client with `api:fhir` and the operation
    scopes it needs, then enable it in Administration > System > API Clients.
+   Register only after step 2: OpenEMR rejects a whole registration that names a
+   scope it does not offer yet.
 
 Every system client runs as `oe-system`, so read [Permissions and audit](#permissions-and-audit)
 before granting scopes. Disabling the module removes its operations and scopes while
