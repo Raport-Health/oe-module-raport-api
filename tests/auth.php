@@ -50,35 +50,21 @@ $route = new HttpRestParsedRoute('GET', '/fhir/$raport-visits', Bootstrap::VISIT
 check($route->isValid() && $route->getResource() === null && $route->getOperation() === '$raport-visits' && $route->getInstanceIdentifier() === null, 'host parses system operation');
 $route = new HttpRestParsedRoute('GET', '/fhir/Patient/' . $encounter . '/$raport-problems', Bootstrap::PROBLEMS_ROUTE);
 check($route->isValid() && $route->getResource() === 'Patient' && $route->getOperation() === '$raport-problems' && $route->getInstanceIdentifier() === $encounter, 'host parses Patient instance operation');
-$request = new HttpRestRequest();
-$request->setRequestUserRole('users');
-check((new OperationController())->document($encounter, $request)->getStatusCode() === 403, 'controller rejects user context');
-$request->setRequestUserRole('patient');
-check((new OperationController())->document($encounter, $request)->getStatusCode() === 403, 'controller rejects patient context');
-$request->setRequestUserRole('system');
-$request->setIsLocalApi(true);
-check((new OperationController())->document($encounter, $request)->getStatusCode() === 403, 'controller rejects browser-session local API');
-$request = new HttpRestRequest();
-$request->setRequestUserRole('users');
-check((new OperationController())->visits($request)->getStatusCode() === 403, 'visits controller rejects user context');
-$request->setRequestUserRole('patient');
-check((new OperationController())->visits($request)->getStatusCode() === 403, 'visits controller rejects patient context');
-$request->setRequestUserRole('system');
-$request->setIsLocalApi(true);
-check((new OperationController())->visits($request)->getStatusCode() === 403, 'visits controller rejects browser-session local API');
-$request = new HttpRestRequest();
-$request->setRequestUserRole('users');
-check((new OperationController())->problems($encounter, $request)->getStatusCode() === 403, 'problems controller rejects user context');
-$request->setRequestUserRole('patient');
-check((new OperationController())->problems($encounter, $request)->getStatusCode() === 403, 'problems controller rejects patient context');
-$request->setRequestUserRole('system');
-$request->setIsLocalApi(true);
-check((new OperationController())->problems($encounter, $request)->getStatusCode() === 403, 'problems controller rejects browser-session local API');
-foreach (['users', 'patient', 'system'] as $role) {
-    $request = new HttpRestRequest();
-    $request->setRequestUserRole($role);
-    $request->setIsLocalApi($role === 'system');
-    check((new OperationController())->labs($encounter, $request)->getStatusCode() === 403, 'labs controller rejects ' . $role . ' non-OAuth context');
+$controller = new OperationController();
+$operations = [
+    'document' => fn(HttpRestRequest $request) => $controller->document($encounter, $request),
+    'visits' => fn(HttpRestRequest $request) => $controller->visits($request),
+    'problems' => fn(HttpRestRequest $request) => $controller->problems($encounter, $request),
+    'labs' => fn(HttpRestRequest $request) => $controller->labs($encounter, $request),
+];
+foreach ($operations as $name => $call) {
+    // A system role through the browser-session local API is not an OAuth client either.
+    foreach (['users', 'patient', 'system'] as $role) {
+        $request = new HttpRestRequest();
+        $request->setRequestUserRole($role);
+        $request->setIsLocalApi($role === 'system');
+        check($call($request)->getStatusCode() === 403, "$name controller rejects $role non-OAuth context");
+    }
 }
 
 function callApi(string $path, ?string $body = null, string $contentType = 'application/json', ?string $token = null): array

@@ -18,275 +18,47 @@
   "affectsState": false,
   "description": "Read current text/table encounter notes with source form inventory and recorded signature evidence. Requires api:fhir and system/Encounter.$raport-document. Supported forms include native SOAP, Clinical Notes, Speech Dictation, Review of Systems Checks, Review of Systems, Clinical Instructions, qualified LBF fields and registered procedure_order forms. Misc Billing Options forms, a procedure_order form whose order is inactive, and a form saved blank are listed as excludedForm. Procedure orders retain history, instructions, tests, answers, reports, results and comments as escaped text; linked attachment bytes and patient messages are outside this contract. Empty encounters return noteCount=0 and no document. No signature authenticity or historical snapshot guarantee. LBF support is native text, text area, provider, static text and template text fields (types 2, 3, 10, 31 and 34), form-local, demographic or history sources (F/D/H, history as saved while the note was the patient's newest); unsupported layouts and native zero-value omission fail explicitly.",
   "parameter": [
-    {
-      "name": "knownRevision",
-      "use": "in",
-      "min": 0,
-      "max": "1",
-      "type": "string",
-      "documentation": "A revision this operation returned earlier. When it still matches, the response omits document and everything else is unchanged."
-    },
-    {
-      "name": "complete",
-      "use": "out",
-      "min": 1,
-      "max": "1",
-      "type": "boolean"
-    },
-    {
-      "name": "revision",
-      "use": "out",
-      "min": 1,
-      "max": "1",
-      "type": "string",
-      "documentation": "SHA-256 of versioned rendered content and source/provenance snapshot; not the generated PDF bytes."
-    },
-    {
-      "name": "noteCount",
-      "use": "out",
-      "min": 1,
-      "max": "1",
-      "type": "unsignedInt"
-    },
-    {
-      "name": "document",
-      "use": "out",
-      "min": 0,
-      "max": "1",
-      "type": "DocumentReference"
-    },
-    {
-      "name": "note",
-      "use": "out",
-      "min": 0,
-      "max": "*",
-      "part": [
-        {
-          "name": "registrationId",
-          "use": "out",
-          "min": 1,
-          "max": "1",
-          "type": "string"
-        },
-        {
-          "name": "sourceFormId",
-          "use": "out",
-          "min": 1,
-          "max": "1",
-          "type": "string"
-        },
-        {
-          "name": "formType",
-          "use": "out",
-          "min": 1,
-          "max": "1",
-          "type": "string"
-        },
-        {
-          "name": "revision",
-          "use": "out",
-          "min": 1,
-          "max": "1",
-          "type": "string"
-        },
-        {
-          "name": "signatureRecorded",
-          "use": "out",
-          "min": 1,
-          "max": "1",
-          "type": "boolean"
-        },
-        {
-          "name": "locked",
-          "use": "out",
-          "min": 1,
-          "max": "1",
-          "type": "boolean"
-        },
-        {
-          "name": "authorUsername",
-          "use": "out",
-          "min": 0,
-          "max": "1",
-          "type": "string"
-        },
-        {
-          "name": "registeredAtLocal",
-          "use": "out",
-          "min": 0,
-          "max": "1",
-          "type": "string"
-        },
-        {
-          "name": "signature",
-          "use": "out",
-          "min": 0,
-          "max": "*",
-          "part": [
-            {
-              "name": "id",
-              "use": "out",
-              "min": 1,
-              "max": "1",
-              "type": "string"
-            },
-            {
-              "name": "signerUserId",
-              "use": "out",
-              "min": 1,
-              "max": "1",
-              "type": "string"
-            },
-            {
-              "name": "recordedAtLocal",
-              "use": "out",
-              "min": 1,
-              "max": "1",
-              "type": "string",
-              "documentation": "Unmodified clinic-local database datetime; no UTC offset is asserted."
-            },
-            {
-              "name": "lockRecorded",
-              "use": "out",
-              "min": 1,
-              "max": "1",
-              "type": "boolean"
-            },
-            {
-              "name": "verification",
-              "use": "out",
-              "min": 1,
-              "max": "1",
-              "type": "code",
-              "documentation": "Always not-performed. Signature presence is not verification that current rendering matches signed data."
-            },
-            {
-              "name": "amendment",
-              "use": "out",
-              "min": 0,
-              "max": "1",
-              "type": "string"
-            },
-            {
-              "name": "signerDisplay",
-              "use": "out",
-              "min": 0,
-              "max": "1",
-              "type": "string"
-            }
-          ]
-        },
-        {
-          "name": "sourceRecord",
-          "use": "out",
-          "min": 0,
-          "max": "*",
-          "part": [
-            {
-              "name": "id",
-              "use": "out",
-              "min": 1,
-              "max": "1",
-              "type": "string"
-            },
-            {
-              "name": "authorUsername",
-              "use": "out",
-              "min": 0,
-              "max": "1",
-              "type": "string"
-            },
-            {
-              "name": "authoredAtLocal",
-              "use": "out",
-              "min": 0,
-              "max": "1",
-              "type": "string"
-            }
-          ]
-        }
-      ]
-    },
-    {
-      "name": "encounterSignature",
-      "use": "out",
-      "min": 0,
-      "max": "*",
-      "part": [
-        {
-          "name": "id",
-          "use": "out",
-          "min": 1,
-          "max": "1",
-          "type": "string"
-        },
-        {
-          "name": "signerUserId",
-          "use": "out",
-          "min": 1,
-          "max": "1",
-          "type": "string"
-        },
-        {
-          "name": "recordedAtLocal",
-          "use": "out",
-          "min": 1,
-          "max": "1",
-          "type": "string",
-          "documentation": "Unmodified clinic-local database datetime; no UTC offset is asserted."
-        },
-        {
-          "name": "lockRecorded",
-          "use": "out",
-          "min": 1,
-          "max": "1",
-          "type": "boolean"
-        },
-        {
-          "name": "verification",
-          "use": "out",
-          "min": 1,
-          "max": "1",
-          "type": "code",
-          "documentation": "Always not-performed. Signature presence is not verification that current rendering matches signed data."
-        },
-        {
-          "name": "amendment",
-          "use": "out",
-          "min": 0,
-          "max": "1",
-          "type": "string"
-        },
-        {
-          "name": "signerDisplay",
-          "use": "out",
-          "min": 0,
-          "max": "1",
-          "type": "string"
-        }
-      ]
-    },
-    {
-      "name": "excludedForm",
-      "use": "out",
-      "min": 0,
-      "max": "*",
-      "part": [
-        {
-          "name": "registrationId",
-          "use": "out",
-          "min": 1,
-          "max": "1",
-          "type": "string"
-        },
-        {
-          "name": "formType",
-          "use": "out",
-          "min": 1,
-          "max": "1",
-          "type": "string"
-        }
-      ]
-    }
+    { "name": "knownRevision", "use": "in", "min": 0, "max": "1", "type": "string", "documentation": "A revision this operation returned earlier. When it still matches, the response omits document and everything else is unchanged." },
+    { "name": "complete", "use": "out", "min": 1, "max": "1", "type": "boolean" },
+    { "name": "revision", "use": "out", "min": 1, "max": "1", "type": "string", "documentation": "SHA-256 of versioned rendered content and source/provenance snapshot; not the generated PDF bytes." },
+    { "name": "noteCount", "use": "out", "min": 1, "max": "1", "type": "unsignedInt" },
+    { "name": "document", "use": "out", "min": 0, "max": "1", "type": "DocumentReference" },
+    { "name": "note", "use": "out", "min": 0, "max": "*", "part": [
+      { "name": "registrationId", "use": "out", "min": 1, "max": "1", "type": "string" },
+      { "name": "sourceFormId", "use": "out", "min": 1, "max": "1", "type": "string" },
+      { "name": "formType", "use": "out", "min": 1, "max": "1", "type": "string" },
+      { "name": "revision", "use": "out", "min": 1, "max": "1", "type": "string" },
+      { "name": "signatureRecorded", "use": "out", "min": 1, "max": "1", "type": "boolean" },
+      { "name": "locked", "use": "out", "min": 1, "max": "1", "type": "boolean" },
+      { "name": "authorUsername", "use": "out", "min": 0, "max": "1", "type": "string" },
+      { "name": "registeredAtLocal", "use": "out", "min": 0, "max": "1", "type": "string" },
+      { "name": "signature", "use": "out", "min": 0, "max": "*", "part": [
+        { "name": "id", "use": "out", "min": 1, "max": "1", "type": "string" },
+        { "name": "signerUserId", "use": "out", "min": 1, "max": "1", "type": "string" },
+        { "name": "recordedAtLocal", "use": "out", "min": 1, "max": "1", "type": "string", "documentation": "Unmodified clinic-local database datetime; no UTC offset is asserted." },
+        { "name": "lockRecorded", "use": "out", "min": 1, "max": "1", "type": "boolean" },
+        { "name": "verification", "use": "out", "min": 1, "max": "1", "type": "code", "documentation": "Always not-performed. Signature presence is not verification that current rendering matches signed data." },
+        { "name": "amendment", "use": "out", "min": 0, "max": "1", "type": "string" },
+        { "name": "signerDisplay", "use": "out", "min": 0, "max": "1", "type": "string" }
+      ] },
+      { "name": "sourceRecord", "use": "out", "min": 0, "max": "*", "part": [
+        { "name": "id", "use": "out", "min": 1, "max": "1", "type": "string" },
+        { "name": "authorUsername", "use": "out", "min": 0, "max": "1", "type": "string" },
+        { "name": "authoredAtLocal", "use": "out", "min": 0, "max": "1", "type": "string" }
+      ] }
+    ] },
+    { "name": "encounterSignature", "use": "out", "min": 0, "max": "*", "part": [
+      { "name": "id", "use": "out", "min": 1, "max": "1", "type": "string" },
+      { "name": "signerUserId", "use": "out", "min": 1, "max": "1", "type": "string" },
+      { "name": "recordedAtLocal", "use": "out", "min": 1, "max": "1", "type": "string", "documentation": "Unmodified clinic-local database datetime; no UTC offset is asserted." },
+      { "name": "lockRecorded", "use": "out", "min": 1, "max": "1", "type": "boolean" },
+      { "name": "verification", "use": "out", "min": 1, "max": "1", "type": "code", "documentation": "Always not-performed. Signature presence is not verification that current rendering matches signed data." },
+      { "name": "amendment", "use": "out", "min": 0, "max": "1", "type": "string" },
+      { "name": "signerDisplay", "use": "out", "min": 0, "max": "1", "type": "string" }
+    ] },
+    { "name": "excludedForm", "use": "out", "min": 0, "max": "*", "part": [
+      { "name": "registrationId", "use": "out", "min": 1, "max": "1", "type": "string" },
+      { "name": "formType", "use": "out", "min": 1, "max": "1", "type": "string" }
+    ] }
   ]
 }

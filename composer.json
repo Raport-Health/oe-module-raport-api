@@ -9,8 +9,5 @@
   },
   "autoload": {
     "psr-4": {"Raport\\OpenEmr\\": "src/"}
-  },
-  "archive": {
-    "exclude": ["/local", "/tests", "/.git", "**/.DS_Store"]
   }
 }

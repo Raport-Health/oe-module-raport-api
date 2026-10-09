@@ -16,600 +16,87 @@
   "type": false,
   "instance": true,
   "affectsState": false,
-  "description": "Requires api:fhir and system/Patient.$raport-labs. No input parameters. Returns all active procedure orders for the patient, including pending orders, legacy/default order types and non-laboratory types (type is preserved), their ordered tests and answers, all reports and all results. Records and references use native UUIDs; tests use order UUID plus native sequence. Families are ordered order/test/answer/report/result, then UUID or composite source key. Native strings, lifecycle statuses, zero values, range text, comments and stored date offsets are retained without guessing clinical meaning or terminology. Linked encounters must have unambiguous same-patient ownership and pass sensitivity/category ACLs. Linked result documents require documents ACL and same-patient ownership. Source inconsistencies fail with 409; permissions fail with 403, never a partial complete response. Missing UUIDs are filled with the host helper before a repeatable-read snapshot. Complete covers the fields declared here, not detailed specimens, billing/account data, attachment bytes or linked patient messages.",
+  "description": "Requires api:fhir and system/Patient.$raport-labs. No input parameters. Returns all active procedure orders for the patient, including pending orders, legacy/default order types and non-laboratory types (type is preserved), their ordered tests and answers, all reports and all results. Records and references use native UUIDs; tests use order UUID plus native sequence. Families are ordered order/test/answer/report/result, then UUID or composite source key. Native strings, lifecycle statuses, zero values, range text, comments and stored date offsets are retained without guessing clinical meaning or terminology. Linked encounters must have unambiguous same-patient ownership and pass sensitivity/category ACLs. Linked result documents require documents ACL and same-patient ownership. Source inconsistencies fail with 409; permissions fail with 403, never a partial complete response. Missing UUIDs are filled with the host helper before a repeatable-read snapshot. Complete covers the fields declared here, not detailed specimens, billing/account data, attachment bytes or linked patient messages. String parts are verbatim native text, absent when NULL or empty, and keep a literal zero. Parts ending in AtLocal are database date/times with no inferred offset, absent when NULL or zero.",
   "parameter": [
-    {
-      "name": "complete",
-      "use": "out",
-      "min": 1,
-      "max": "1",
-      "type": "boolean",
-      "documentation": "True only when every in-scope row and link was read successfully."
-    },
-    {
-      "name": "order",
-      "use": "out",
-      "min": 0,
-      "max": "*",
-      "part": [
-        {
-          "name": "uuid",
-          "use": "out",
-          "min": 1,
-          "max": "1",
-          "type": "string",
-          "documentation": "Native resource UUID."
-        },
-        {
-          "name": "type",
-          "use": "out",
-          "min": 0,
-          "max": "1",
-          "type": "string",
-          "documentation": "Verbatim native text; absent when NULL or empty. Literal zero is retained."
-        },
-        {
-          "name": "status",
-          "use": "out",
-          "min": 0,
-          "max": "1",
-          "type": "string",
-          "documentation": "Verbatim OpenEMR status (for example pending, prelim, final, correct, cancel or error); not a FHIR resource status."
-        },
-        {
-          "name": "priority",
-          "use": "out",
-          "min": 0,
-          "max": "1",
-          "type": "string",
-          "documentation": "Verbatim native text; absent when NULL or empty. Literal zero is retained."
-        },
-        {
-          "name": "intent",
-          "use": "out",
-          "min": 0,
-          "max": "1",
-          "type": "string",
-          "documentation": "Verbatim native text; absent when NULL or empty. Literal zero is retained."
-        },
-        {
-          "name": "orderedAtLocal",
-          "use": "out",
-          "min": 0,
-          "max": "1",
-          "type": "string",
-          "documentation": "Verbatim database date/time; no offset is inferred. NULL and zero dates are absent."
-        },
-        {
-          "name": "collectedAtLocal",
-          "use": "out",
-          "min": 0,
-          "max": "1",
-          "type": "string",
-          "documentation": "Verbatim database date/time; no offset is inferred. NULL and zero dates are absent."
-        },
-        {
-          "name": "transmittedAtLocal",
-          "use": "out",
-          "min": 0,
-          "max": "1",
-          "type": "string",
-          "documentation": "Verbatim database date/time; no offset is inferred. NULL and zero dates are absent."
-        },
-        {
-          "name": "clinicalHistory",
-          "use": "out",
-          "min": 0,
-          "max": "1",
-          "type": "string",
-          "documentation": "Verbatim native text; absent when NULL or empty. Literal zero is retained."
-        },
-        {
-          "name": "patientInstructions",
-          "use": "out",
-          "min": 0,
-          "max": "1",
-          "type": "string",
-          "documentation": "Verbatim native text; absent when NULL or empty. Literal zero is retained."
-        },
-        {
-          "name": "diagnosis",
-          "use": "out",
-          "min": 0,
-          "max": "1",
-          "type": "string",
-          "documentation": "Verbatim native text; absent when NULL or empty. Literal zero is retained."
-        },
-        {
-          "name": "controlId",
-          "use": "out",
-          "min": 0,
-          "max": "1",
-          "type": "string",
-          "documentation": "Verbatim native text; absent when NULL or empty. Literal zero is retained."
-        },
-        {
-          "name": "externalId",
-          "use": "out",
-          "min": 0,
-          "max": "1",
-          "type": "string",
-          "documentation": "Verbatim native text; absent when NULL or empty. Literal zero is retained."
-        },
-        {
-          "name": "specimenType",
-          "use": "out",
-          "min": 0,
-          "max": "1",
-          "type": "string",
-          "documentation": "Verbatim native text; absent when NULL or empty. Literal zero is retained."
-        },
-        {
-          "name": "specimenLocation",
-          "use": "out",
-          "min": 0,
-          "max": "1",
-          "type": "string",
-          "documentation": "Verbatim native text; absent when NULL or empty. Literal zero is retained."
-        },
-        {
-          "name": "specimenVolume",
-          "use": "out",
-          "min": 0,
-          "max": "1",
-          "type": "string",
-          "documentation": "Verbatim native text; absent when NULL or empty. Literal zero is retained."
-        },
-        {
-          "name": "specimenFasting",
-          "use": "out",
-          "min": 0,
-          "max": "1",
-          "type": "string",
-          "documentation": "Verbatim native text; absent when NULL or empty. Literal zero is retained."
-        },
-        {
-          "name": "labId",
-          "use": "out",
-          "min": 0,
-          "max": "1",
-          "type": "string",
-          "documentation": "Verbatim native text; absent when NULL or empty. Literal zero is retained."
-        },
-        {
-          "name": "labName",
-          "use": "out",
-          "min": 0,
-          "max": "1",
-          "type": "string",
-          "documentation": "Verbatim native text; absent when NULL or empty. Literal zero is retained."
-        },
-        {
-          "name": "providerId",
-          "use": "out",
-          "min": 0,
-          "max": "1",
-          "type": "string",
-          "documentation": "Verbatim native text; absent when NULL or empty. Literal zero is retained."
-        },
-        {
-          "name": "providerName",
-          "use": "out",
-          "min": 0,
-          "max": "1",
-          "type": "string",
-          "documentation": "Verbatim native text; absent when NULL or empty. Literal zero is retained."
-        },
-        {
-          "name": "encounter",
-          "use": "out",
-          "min": 0,
-          "max": "1",
-          "type": "string",
-          "documentation": "UUID of the stored owning encounter; absent for encounter_id 0."
-        }
-      ]
-    },
-    {
-      "name": "test",
-      "use": "out",
-      "min": 0,
-      "max": "*",
-      "part": [
-        {
-          "name": "order",
-          "use": "out",
-          "min": 1,
-          "max": "1",
-          "type": "string"
-        },
-        {
-          "name": "sequence",
-          "use": "out",
-          "min": 1,
-          "max": "1",
-          "type": "integer"
-        },
-        {
-          "name": "code",
-          "use": "out",
-          "min": 0,
-          "max": "1",
-          "type": "string",
-          "documentation": "Verbatim source text; no LOINC or UCUM system is asserted."
-        },
-        {
-          "name": "name",
-          "use": "out",
-          "min": 0,
-          "max": "1",
-          "type": "string",
-          "documentation": "Verbatim native text; absent when NULL or empty. Literal zero is retained."
-        },
-        {
-          "name": "type",
-          "use": "out",
-          "min": 0,
-          "max": "1",
-          "type": "string",
-          "documentation": "Verbatim native text; absent when NULL or empty. Literal zero is retained."
-        },
-        {
-          "name": "diagnoses",
-          "use": "out",
-          "min": 0,
-          "max": "1",
-          "type": "string",
-          "documentation": "Verbatim native text; absent when NULL or empty. Literal zero is retained."
-        },
-        {
-          "name": "source",
-          "use": "out",
-          "min": 0,
-          "max": "1",
-          "type": "string",
-          "documentation": "Verbatim native text; absent when NULL or empty. Literal zero is retained."
-        },
-        {
-          "name": "doNotSend",
-          "use": "out",
-          "min": 0,
-          "max": "1",
-          "type": "string",
-          "documentation": "Verbatim native text; absent when NULL or empty. Literal zero is retained."
-        },
-        {
-          "name": "transport",
-          "use": "out",
-          "min": 0,
-          "max": "1",
-          "type": "string",
-          "documentation": "Verbatim native text; absent when NULL or empty. Literal zero is retained."
-        },
-        {
-          "name": "endAtLocal",
-          "use": "out",
-          "min": 0,
-          "max": "1",
-          "type": "string",
-          "documentation": "Verbatim database date/time; no offset is inferred. NULL and zero dates are absent."
-        },
-        {
-          "name": "reasonCode",
-          "use": "out",
-          "min": 0,
-          "max": "1",
-          "type": "string",
-          "documentation": "Verbatim native text; absent when NULL or empty. Literal zero is retained."
-        },
-        {
-          "name": "reasonDescription",
-          "use": "out",
-          "min": 0,
-          "max": "1",
-          "type": "string",
-          "documentation": "Verbatim native text; absent when NULL or empty. Literal zero is retained."
-        },
-        {
-          "name": "reasonStartAtLocal",
-          "use": "out",
-          "min": 0,
-          "max": "1",
-          "type": "string",
-          "documentation": "Verbatim database date/time; no offset is inferred. NULL and zero dates are absent."
-        },
-        {
-          "name": "reasonEndAtLocal",
-          "use": "out",
-          "min": 0,
-          "max": "1",
-          "type": "string",
-          "documentation": "Verbatim database date/time; no offset is inferred. NULL and zero dates are absent."
-        },
-        {
-          "name": "reasonStatus",
-          "use": "out",
-          "min": 0,
-          "max": "1",
-          "type": "string",
-          "documentation": "Verbatim native text; absent when NULL or empty. Literal zero is retained."
-        }
-      ]
-    },
-    {
-      "name": "answer",
-      "use": "out",
-      "min": 0,
-      "max": "*",
-      "part": [
-        {
-          "name": "order",
-          "use": "out",
-          "min": 1,
-          "max": "1",
-          "type": "string"
-        },
-        {
-          "name": "sequence",
-          "use": "out",
-          "min": 1,
-          "max": "1",
-          "type": "integer"
-        },
-        {
-          "name": "questionCode",
-          "use": "out",
-          "min": 0,
-          "max": "1",
-          "type": "string",
-          "documentation": "Verbatim native text; absent when NULL or empty. Literal zero is retained."
-        },
-        {
-          "name": "answerSequence",
-          "use": "out",
-          "min": 0,
-          "max": "1",
-          "type": "string",
-          "documentation": "Verbatim native text; absent when NULL or empty. Literal zero is retained."
-        },
-        {
-          "name": "value",
-          "use": "out",
-          "min": 0,
-          "max": "1",
-          "type": "string",
-          "documentation": "Verbatim native text; absent when NULL or empty. Literal zero is retained."
-        },
-        {
-          "name": "procedureCode",
-          "use": "out",
-          "min": 0,
-          "max": "1",
-          "type": "string",
-          "documentation": "Verbatim native text; absent when NULL or empty. Literal zero is retained."
-        }
-      ]
-    },
-    {
-      "name": "report",
-      "use": "out",
-      "min": 0,
-      "max": "*",
-      "part": [
-        {
-          "name": "uuid",
-          "use": "out",
-          "min": 1,
-          "max": "1",
-          "type": "string",
-          "documentation": "Native resource UUID."
-        },
-        {
-          "name": "order",
-          "use": "out",
-          "min": 1,
-          "max": "1",
-          "type": "string"
-        },
-        {
-          "name": "sequence",
-          "use": "out",
-          "min": 1,
-          "max": "1",
-          "type": "integer"
-        },
-        {
-          "name": "status",
-          "use": "out",
-          "min": 0,
-          "max": "1",
-          "type": "string",
-          "documentation": "Verbatim OpenEMR status (for example pending, prelim, final, correct, cancel or error); not a FHIR resource status."
-        },
-        {
-          "name": "reviewStatus",
-          "use": "out",
-          "min": 0,
-          "max": "1",
-          "type": "string",
-          "documentation": "Verbatim native text; absent when NULL or empty. Literal zero is retained."
-        },
-        {
-          "name": "reportedAtLocal",
-          "use": "out",
-          "min": 0,
-          "max": "1",
-          "type": "string",
-          "documentation": "Verbatim database date/time; no offset is inferred. NULL and zero dates are absent."
-        },
-        {
-          "name": "reportedOffset",
-          "use": "out",
-          "min": 0,
-          "max": "1",
-          "type": "string",
-          "documentation": "Verbatim native text; absent when NULL or empty. Literal zero is retained."
-        },
-        {
-          "name": "collectedAtLocal",
-          "use": "out",
-          "min": 0,
-          "max": "1",
-          "type": "string",
-          "documentation": "Verbatim database date/time; no offset is inferred. NULL and zero dates are absent."
-        },
-        {
-          "name": "collectedOffset",
-          "use": "out",
-          "min": 0,
-          "max": "1",
-          "type": "string",
-          "documentation": "Verbatim native text; absent when NULL or empty. Literal zero is retained."
-        },
-        {
-          "name": "specimenIdentifier",
-          "use": "out",
-          "min": 0,
-          "max": "1",
-          "type": "string",
-          "documentation": "Verbatim native text; absent when NULL or empty. Literal zero is retained."
-        },
-        {
-          "name": "notes",
-          "use": "out",
-          "min": 0,
-          "max": "1",
-          "type": "string",
-          "documentation": "Verbatim native text; absent when NULL or empty. Literal zero is retained."
-        }
-      ]
-    },
-    {
-      "name": "result",
-      "use": "out",
-      "min": 0,
-      "max": "*",
-      "part": [
-        {
-          "name": "uuid",
-          "use": "out",
-          "min": 1,
-          "max": "1",
-          "type": "string",
-          "documentation": "Native resource UUID."
-        },
-        {
-          "name": "report",
-          "use": "out",
-          "min": 1,
-          "max": "1",
-          "type": "string"
-        },
-        {
-          "name": "dataType",
-          "use": "out",
-          "min": 0,
-          "max": "1",
-          "type": "string",
-          "documentation": "Verbatim native text; absent when NULL or empty. Literal zero is retained."
-        },
-        {
-          "name": "code",
-          "use": "out",
-          "min": 0,
-          "max": "1",
-          "type": "string",
-          "documentation": "Verbatim source text; no LOINC or UCUM system is asserted."
-        },
-        {
-          "name": "name",
-          "use": "out",
-          "min": 0,
-          "max": "1",
-          "type": "string",
-          "documentation": "Verbatim native text; absent when NULL or empty. Literal zero is retained."
-        },
-        {
-          "name": "value",
-          "use": "out",
-          "min": 0,
-          "max": "1",
-          "type": "string",
-          "documentation": "Verbatim native text; absent when NULL or empty. Literal zero is retained."
-        },
-        {
-          "name": "units",
-          "use": "out",
-          "min": 0,
-          "max": "1",
-          "type": "string",
-          "documentation": "Verbatim source text; no LOINC or UCUM system is asserted."
-        },
-        {
-          "name": "referenceRange",
-          "use": "out",
-          "min": 0,
-          "max": "1",
-          "type": "string",
-          "documentation": "Verbatim range text, including zero/negative bounds, comparator ranges and prose."
-        },
-        {
-          "name": "abnormal",
-          "use": "out",
-          "min": 0,
-          "max": "1",
-          "type": "string",
-          "documentation": "Verbatim native text; absent when NULL or empty. Literal zero is retained."
-        },
-        {
-          "name": "status",
-          "use": "out",
-          "min": 0,
-          "max": "1",
-          "type": "string",
-          "documentation": "Verbatim OpenEMR status (for example pending, prelim, final, correct, cancel or error); not a FHIR resource status."
-        },
-        {
-          "name": "comments",
-          "use": "out",
-          "min": 0,
-          "max": "1",
-          "type": "string",
-          "documentation": "Verbatim native text; absent when NULL or empty. Literal zero is retained."
-        },
-        {
-          "name": "facility",
-          "use": "out",
-          "min": 0,
-          "max": "1",
-          "type": "string",
-          "documentation": "Verbatim native text; absent when NULL or empty. Literal zero is retained."
-        },
-        {
-          "name": "resultAtLocal",
-          "use": "out",
-          "min": 0,
-          "max": "1",
-          "type": "string",
-          "documentation": "Verbatim database date/time; no offset is inferred. NULL and zero dates are absent."
-        },
-        {
-          "name": "endAtLocal",
-          "use": "out",
-          "min": 0,
-          "max": "1",
-          "type": "string",
-          "documentation": "Verbatim database date/time; no offset is inferred. NULL and zero dates are absent."
-        },
-        {
-          "name": "document",
-          "use": "out",
-          "min": 0,
-          "max": "1",
-          "type": "string",
-          "documentation": "UUID of the linked same-patient documents row. Attachment bytes are not included."
-        }
-      ]
-    }
+    { "name": "complete", "use": "out", "min": 1, "max": "1", "type": "boolean", "documentation": "True only when every in-scope row and link was read successfully." },
+    { "name": "order", "use": "out", "min": 0, "max": "*", "part": [
+      { "name": "uuid", "use": "out", "min": 1, "max": "1", "type": "string", "documentation": "Native resource UUID." },
+      { "name": "type", "use": "out", "min": 0, "max": "1", "type": "string" },
+      { "name": "status", "use": "out", "min": 0, "max": "1", "type": "string", "documentation": "Verbatim OpenEMR status (for example pending, prelim, final, correct, cancel or error); not a FHIR resource status." },
+      { "name": "priority", "use": "out", "min": 0, "max": "1", "type": "string" },
+      { "name": "intent", "use": "out", "min": 0, "max": "1", "type": "string" },
+      { "name": "orderedAtLocal", "use": "out", "min": 0, "max": "1", "type": "string" },
+      { "name": "collectedAtLocal", "use": "out", "min": 0, "max": "1", "type": "string" },
+      { "name": "transmittedAtLocal", "use": "out", "min": 0, "max": "1", "type": "string" },
+      { "name": "clinicalHistory", "use": "out", "min": 0, "max": "1", "type": "string" },
+      { "name": "patientInstructions", "use": "out", "min": 0, "max": "1", "type": "string" },
+      { "name": "diagnosis", "use": "out", "min": 0, "max": "1", "type": "string" },
+      { "name": "controlId", "use": "out", "min": 0, "max": "1", "type": "string" },
+      { "name": "externalId", "use": "out", "min": 0, "max": "1", "type": "string" },
+      { "name": "specimenType", "use": "out", "min": 0, "max": "1", "type": "string" },
+      { "name": "specimenLocation", "use": "out", "min": 0, "max": "1", "type": "string" },
+      { "name": "specimenVolume", "use": "out", "min": 0, "max": "1", "type": "string" },
+      { "name": "specimenFasting", "use": "out", "min": 0, "max": "1", "type": "string" },
+      { "name": "labId", "use": "out", "min": 0, "max": "1", "type": "string" },
+      { "name": "labName", "use": "out", "min": 0, "max": "1", "type": "string" },
+      { "name": "providerId", "use": "out", "min": 0, "max": "1", "type": "string" },
+      { "name": "providerName", "use": "out", "min": 0, "max": "1", "type": "string" },
+      { "name": "encounter", "use": "out", "min": 0, "max": "1", "type": "string", "documentation": "UUID of the stored owning encounter; absent for encounter_id 0." }
+    ] },
+    { "name": "test", "use": "out", "min": 0, "max": "*", "part": [
+      { "name": "order", "use": "out", "min": 1, "max": "1", "type": "string" },
+      { "name": "sequence", "use": "out", "min": 1, "max": "1", "type": "integer" },
+      { "name": "code", "use": "out", "min": 0, "max": "1", "type": "string", "documentation": "Verbatim source text; no LOINC or UCUM system is asserted." },
+      { "name": "name", "use": "out", "min": 0, "max": "1", "type": "string" },
+      { "name": "type", "use": "out", "min": 0, "max": "1", "type": "string" },
+      { "name": "diagnoses", "use": "out", "min": 0, "max": "1", "type": "string" },
+      { "name": "source", "use": "out", "min": 0, "max": "1", "type": "string" },
+      { "name": "doNotSend", "use": "out", "min": 0, "max": "1", "type": "string" },
+      { "name": "transport", "use": "out", "min": 0, "max": "1", "type": "string" },
+      { "name": "endAtLocal", "use": "out", "min": 0, "max": "1", "type": "string" },
+      { "name": "reasonCode", "use": "out", "min": 0, "max": "1", "type": "string" },
+      { "name": "reasonDescription", "use": "out", "min": 0, "max": "1", "type": "string" },
+      { "name": "reasonStartAtLocal", "use": "out", "min": 0, "max": "1", "type": "string" },
+      { "name": "reasonEndAtLocal", "use": "out", "min": 0, "max": "1", "type": "string" },
+      { "name": "reasonStatus", "use": "out", "min": 0, "max": "1", "type": "string" }
+    ] },
+    { "name": "answer", "use": "out", "min": 0, "max": "*", "part": [
+      { "name": "order", "use": "out", "min": 1, "max": "1", "type": "string" },
+      { "name": "sequence", "use": "out", "min": 1, "max": "1", "type": "integer" },
+      { "name": "questionCode", "use": "out", "min": 0, "max": "1", "type": "string" },
+      { "name": "answerSequence", "use": "out", "min": 0, "max": "1", "type": "string" },
+      { "name": "value", "use": "out", "min": 0, "max": "1", "type": "string" },
+      { "name": "procedureCode", "use": "out", "min": 0, "max": "1", "type": "string" }
+    ] },
+    { "name": "report", "use": "out", "min": 0, "max": "*", "part": [
+      { "name": "uuid", "use": "out", "min": 1, "max": "1", "type": "string", "documentation": "Native resource UUID." },
+      { "name": "order", "use": "out", "min": 1, "max": "1", "type": "string" },
+      { "name": "sequence", "use": "out", "min": 1, "max": "1", "type": "integer" },
+      { "name": "status", "use": "out", "min": 0, "max": "1", "type": "string", "documentation": "Verbatim OpenEMR status (for example pending, prelim, final, correct, cancel or error); not a FHIR resource status." },
+      { "name": "reviewStatus", "use": "out", "min": 0, "max": "1", "type": "string" },
+      { "name": "reportedAtLocal", "use": "out", "min": 0, "max": "1", "type": "string" },
+      { "name": "reportedOffset", "use": "out", "min": 0, "max": "1", "type": "string" },
+      { "name": "collectedAtLocal", "use": "out", "min": 0, "max": "1", "type": "string" },
+      { "name": "collectedOffset", "use": "out", "min": 0, "max": "1", "type": "string" },
+      { "name": "specimenIdentifier", "use": "out", "min": 0, "max": "1", "type": "string" },
+      { "name": "notes", "use": "out", "min": 0, "max": "1", "type": "string" }
+    ] },
+    { "name": "result", "use": "out", "min": 0, "max": "*", "part": [
+      { "name": "uuid", "use": "out", "min": 1, "max": "1", "type": "string", "documentation": "Native resource UUID." },
+      { "name": "report", "use": "out", "min": 1, "max": "1", "type": "string" },
+      { "name": "dataType", "use": "out", "min": 0, "max": "1", "type": "string" },
+      { "name": "code", "use": "out", "min": 0, "max": "1", "type": "string", "documentation": "Verbatim source text; no LOINC or UCUM system is asserted." },
+      { "name": "name", "use": "out", "min": 0, "max": "1", "type": "string" },
+      { "name": "value", "use": "out", "min": 0, "max": "1", "type": "string" },
+      { "name": "units", "use": "out", "min": 0, "max": "1", "type": "string", "documentation": "Verbatim source text; no LOINC or UCUM system is asserted." },
+      { "name": "referenceRange", "use": "out", "min": 0, "max": "1", "type": "string", "documentation": "Verbatim range text, including zero/negative bounds, comparator ranges and prose." },
+      { "name": "abnormal", "use": "out", "min": 0, "max": "1", "type": "string" },
+      { "name": "status", "use": "out", "min": 0, "max": "1", "type": "string", "documentation": "Verbatim OpenEMR status (for example pending, prelim, final, correct, cancel or error); not a FHIR resource status." },
+      { "name": "comments", "use": "out", "min": 0, "max": "1", "type": "string" },
+      { "name": "facility", "use": "out", "min": 0, "max": "1", "type": "string" },
+      { "name": "resultAtLocal", "use": "out", "min": 0, "max": "1", "type": "string" },
+      { "name": "endAtLocal", "use": "out", "min": 0, "max": "1", "type": "string" },
+      { "name": "document", "use": "out", "min": 0, "max": "1", "type": "string", "documentation": "UUID of the linked same-patient documents row. Attachment bytes are not included." }
+    ] }
   ]
 }

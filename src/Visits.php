@@ -17,7 +17,8 @@ final class Visits
     private const PROVIDERS = "SELECT id, uuid, username, fname, lname, npi, active, COALESCE(username != '' AND authorized = 1 AND calendar = 1, 0) AS calendar_owner FROM users WHERE ";
     // Category and facility Location are joined as the host AppointmentService::search joins them for FHIR Appointment.
     private const APPOINTMENTS = "SELECT e.pc_eid, e.uuid, e.pc_pid, e.pc_aid, e.pc_eventDate, e.pc_startTime, e.pc_endTime, e.pc_apptstatus, e.pc_recurrtype, p.pid, p.uuid AS patient_uuid, p.squad, c.pc_constant_id, c.pc_catname, m.uuid AS location_uuid FROM openemr_postcalendar_events e JOIN patient_data p ON p.pid = e.pc_pid LEFT JOIN openemr_postcalendar_categories c ON c.pc_catid = e.pc_catid LEFT JOIN facility f ON f.id = e.pc_facility LEFT JOIN uuid_mapping m ON m.target_uuid = f.uuid AND m.resource = 'Location' WHERE ";
-    // The host FHIR Appointment status of each pc_apptstatus (FhirAppointmentService::parseOpenEMRRecord); any other is pending.
+    // The host FHIR Appointment status of each default pc_apptstatus (FhirAppointmentService::parseOpenEMRRecord). The host
+    // reads a clinic's own status as pending; here it fails, since nobody has decided what it means.
     private const STATUS = ['-' => 'proposed', '#' => 'pending', '^' => 'pending', '>' => 'fulfilled', '$' => 'fulfilled', 'AVM' => 'booked', 'SMS' => 'booked', 'EMAIL' => 'booked', '*' => 'booked', '%' => 'cancelled', '!' => 'cancelled', 'x' => 'cancelled', '?' => 'noshow', '~' => 'arrived', '@' => 'arrived', '<' => 'checked-in', '+' => 'checked-in', 'CALL' => 'waitlist'];
     private const ENCOUNTERS = 'SELECT fe.id, fe.uuid, fe.encounter, fe.pid, fe.date, fe.reason, fe.provider_id, fe.sensitivity, fe.pc_catid, p.uuid AS patient_uuid, p.squad FROM form_encounter fe JOIN patient_data p ON p.pid = fe.pid WHERE ';
     // The Flow Board's current tracker row: same patient, date, start time and appointment id. Encounter 0 is blank, and a recurring appointment is never linked.
@@ -116,7 +117,7 @@ final class Visits
 
         $ids = [];
         foreach ($appointments as $row) {
-            $ids[] = self::provider($row);
+            $ids[] = (int) $row['pc_aid'];
         }
         foreach ($encounters as $row) {
             $ids[] = (int) $row['provider_id'];
@@ -175,11 +176,6 @@ final class Visits
         return $records;
     }
 
-    private static function provider(array $appointment): int
-    {
-        return ctype_digit((string) $appointment['pc_aid']) ? (int) $appointment['pc_aid'] : 0;
-    }
-
     private function allow(string $section, string $value): void
     {
         $this->allowed[$section . '|' . $value] ??= AclMain::aclCheckCore($section, $value, $this->user);
@@ -228,10 +224,11 @@ final class Visits
                 $end = new \DateTimeImmutable($row['pc_eventDate'] . ' ' . $row['pc_endTime'], new \DateTimeZone('UTC'));
                 $parts[] = ['name' => 'end', 'valueString' => $end->format('Y-m-d H:i:s')];
             }
-            if (isset($providers[self::provider($row)])) {
-                $parts[] = ['name' => 'provider', 'valueString' => $uuid($providers[self::provider($row)])];
+            if (isset($providers[(int) $row['pc_aid']])) {
+                $parts[] = ['name' => 'provider', 'valueString' => $uuid($providers[(int) $row['pc_aid']])];
             }
-            $parts[] = ['name' => 'status', 'valueCode' => self::STATUS[$row['pc_apptstatus']] ?? 'pending'];
+            $parts[] = ['name' => 'status', 'valueCode' => self::STATUS[$row['pc_apptstatus']]
+                ?? throw new OperationProblem(409, 'conflict', 'Appointment ' . $uuid($row) . ' has an unsupported status.')];
             foreach (['pc_constant_id' => 'typeCode', 'pc_catname' => 'typeDisplay'] as $column => $name) {
                 if ((string) $row[$column] !== '') {
                     $parts[] = ['name' => $name, 'valueString' => $row[$column]];

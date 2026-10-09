@@ -3,8 +3,7 @@
 declare(strict_types=1);
 
 // SPDX-License-Identifier: MIT
-// Included by auth.php in the locked disposable localhost harness, with real OAuth HTTP requests.
-if (PHP_SAPI !== 'cli' || !isset($token) || $GLOBALS['site_addr_oath'] !== 'https://localhost:19443') { exit(1); }
+// Included by auth.php while its disposable OAuth client is enabled.
 
 use OpenEMR\Common\Uuid\UuidRegistry;
 use OpenEMR\Gacl\GaclApi;

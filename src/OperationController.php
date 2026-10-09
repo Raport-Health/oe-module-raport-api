@@ -82,8 +82,8 @@ final class OperationController
     {
         $session = $request->getSession();
         $patientId = $request->attributes->get('raportPatientId');
-        EventAuditLogger::getInstance()->recordLogItem($status === 200 ? 1 : 0, 'api', $session->get('authUser', ''), $session->get('authProvider', ''), $label . ' HTTP ' . $status, $patientId, 'api', 'open-emr', null, null, '', [
-            'user_id' => (int) $session->get('authUserID', 0), 'patient_id' => $patientId ?? 0,
+        EventAuditLogger::getInstance()->recordLogItem($status === 200 ? 1 : 0, 'api', $session->get('authUser'), $session->get('authProvider'), $label . ' HTTP ' . $status, $patientId, 'api', 'open-emr', null, null, '', [
+            'user_id' => (int) $session->get('authUserID'), 'patient_id' => $patientId ?? 0,
             'method' => 'GET', 'request' => $operation,
             'request_url' => $request->getBaseUrl() . $request->getPathInfo(), 'request_body' => '', 'response' => '',
         ]);

@@ -2,7 +2,6 @@
 # SPDX-License-Identifier: MIT
 """Run after local/check.sh; requires jsonschema, Poppler and the official R4 schema ZIP."""
 import json
-from argparse import ArgumentParser
 from pathlib import Path
 import re
 import subprocess
@@ -11,9 +10,7 @@ from zipfile import ZipFile
 from jsonschema import Draft6Validator
 
 root = Path(__file__).resolve().parents[1]
-parser = ArgumentParser(description=__doc__)
-parser.add_argument("--artifacts", type=Path, default=root / "local/artifacts")
-artifacts = parser.parse_args().artifacts
+artifacts = root / "local/artifacts"
 with ZipFile(artifacts / "fhir.schema.json.zip") as archive:
     validator = Draft6Validator(json.loads(archive.read("fhir.schema.json")))
 paths = [root / name for name in ["OperationDefinition.json", "OperationDefinition-visits.json", "OperationDefinition-problems.json", "OperationDefinition-labs.json"]]
