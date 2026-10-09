@@ -88,7 +88,7 @@ final class Labs
                     $this->allow('sensitivities|' . $row['sensitivity'], $user);
                 }
                 $this->allow(AclMain::fetchPostCalendarCategoryACO($row['pc_catid']), $user);
-                $parts[] = ['name' => 'encounter', 'valueString' => $this->uuid($row['encounter_uuid'])];
+                $parts[] = ['name' => 'encounter', 'valueString' => UuidRegistry::uuidToString($row['encounter_uuid'])];
             }
             $entries[] = ['name' => 'order', 'part' => $parts];
         }
@@ -122,7 +122,7 @@ final class Labs
                 if ((int) $row['document_pid'] !== $pid || strlen((string) $row['document_uuid']) !== 16) {
                     throw new OperationProblem(409, 'conflict', "Result $uuid has an unresolvable document link.");
                 }
-                $parts[] = ['name' => 'document', 'valueString' => $this->uuid($row['document_uuid'])];
+                $parts[] = ['name' => 'document', 'valueString' => UuidRegistry::uuidToString($row['document_uuid'])];
             }
             $entries[] = ['name' => 'result', 'part' => $parts];
         }

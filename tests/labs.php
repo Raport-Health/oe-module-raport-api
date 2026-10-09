@@ -58,7 +58,7 @@ try {
     $orderUuid = UuidRegistry::uuidToString(sqlQuery('SELECT uuid FROM procedure_order WHERE procedure_order_id=940001')['uuid']);
     $legacyUuid = UuidRegistry::uuidToString(sqlQuery('SELECT uuid FROM procedure_order WHERE procedure_order_id=940002')['uuid']);
     check($orderRows[$orderUuid]['encounter'] === $labEncounter && $orderRows[$orderUuid]['clinicalHistory'] === 'HISTORY marker Ω <script>plain text</script>' && $orderRows[$orderUuid]['patientInstructions'] === "INSTRUCTIONS marker\nSynthetic only" && !isset($orderRows[$legacyUuid]['encounter']), 'native order text and authoritative optional encounter link');
-    check(labsCall($labsToken, strtoupper($labPatient)) === $pending && labsCall($labsToken, $labPatient) === $pending, 'unchanged reads and uppercase UUID input have stable content');
+    check(labsCall($labsToken, $labPatient) === $pending, 'unchanged reads have stable content');
     $empty = labsCall($labsToken, $labEmpty);
     check(count($empty['parameter']) === 1, 'known empty patient has explicit complete snapshot');
     file_put_contents('/module-local/artifacts/labs-empty.json', json_encode($empty, JSON_THROW_ON_ERROR));

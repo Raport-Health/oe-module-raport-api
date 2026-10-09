@@ -16,7 +16,7 @@ final class Visits
     // calendar_owner is the host calendar-user rule, which ignores active. It is NULL, so false, when a column is NULL.
     private const PROVIDERS = "SELECT id, uuid, username, fname, lname, npi, active, (username != '' AND authorized = 1 AND calendar = 1) AS calendar_owner FROM users WHERE ";
     // Category and facility Location are joined as the host AppointmentService::search joins them for FHIR Appointment.
-    private const APPOINTMENTS = "SELECT e.pc_eid, e.uuid, e.pc_pid, e.pc_aid, e.pc_eventDate, e.pc_startTime, e.pc_endTime, e.pc_apptstatus, e.pc_recurrtype, p.pid, p.uuid AS patient_uuid, p.squad, c.pc_constant_id, c.pc_catname, m.uuid AS location_uuid FROM openemr_postcalendar_events e JOIN patient_data p ON p.pid = e.pc_pid LEFT JOIN openemr_postcalendar_categories c ON c.pc_catid = e.pc_catid LEFT JOIN facility f ON f.id = e.pc_facility LEFT JOIN uuid_mapping m ON m.target_uuid = f.uuid AND m.resource = 'Location' WHERE ";
+    private const APPOINTMENTS = "SELECT e.pc_eid, e.uuid, e.pc_aid, e.pc_eventDate, e.pc_startTime, e.pc_endTime, e.pc_apptstatus, e.pc_recurrtype, p.pid, p.uuid AS patient_uuid, p.squad, c.pc_constant_id, c.pc_catname, m.uuid AS location_uuid FROM openemr_postcalendar_events e JOIN patient_data p ON p.pid = e.pc_pid LEFT JOIN openemr_postcalendar_categories c ON c.pc_catid = e.pc_catid LEFT JOIN facility f ON f.id = e.pc_facility LEFT JOIN uuid_mapping m ON m.target_uuid = f.uuid AND m.resource = 'Location' WHERE ";
     // The host FHIR Appointment status of each default pc_apptstatus (FhirAppointmentService::parseOpenEMRRecord). The host
     // reads a clinic's own status as pending; here it fails, since nobody has decided what it means.
     private const STATUS = ['-' => 'proposed', '#' => 'pending', '^' => 'pending', '>' => 'fulfilled', '$' => 'fulfilled', 'AVM' => 'booked', 'SMS' => 'booked', 'EMAIL' => 'booked', '*' => 'booked', '%' => 'cancelled', '!' => 'cancelled', 'x' => 'cancelled', '?' => 'noshow', '~' => 'arrived', '@' => 'arrived', '<' => 'checked-in', '+' => 'checked-in', 'CALL' => 'waitlist'];
@@ -48,16 +48,14 @@ final class Visits
 
     private function scope(array $query): ?array
     {
-        foreach ($query as $name => $value) {
-            if (!in_array($name, ['patient', 'start', 'end'], true) || !is_string($value)) {
-                throw new OperationProblem(400, 'invalid', 'Unsupported query parameter.');
-            }
+        if (array_filter($query, 'is_string') !== $query) {
+            throw new OperationProblem(400, 'invalid', 'Query parameters must be single values.');
         }
         $names = array_keys($query);
         sort($names);
         return match ($names) {
             [] => null,
-            ['patient'] => preg_match(OperationController::UUID, $query['patient']) ? ['patient' => strtolower($query['patient'])]
+            ['patient'] => preg_match(OperationController::UUID, $query['patient']) ? ['patient' => $query['patient']]
                 : throw new OperationProblem(400, 'invalid', 'A patient UUID is required.'),
             ['end', 'start'] => $this->window($query['start'], $query['end']),
             default => throw new OperationProblem(400, 'invalid', 'Use no parameters, patient, or start and end.'),

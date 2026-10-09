@@ -240,7 +240,6 @@ try {
     $gacl->clear_cache();
     sqlStatement('UPDATE globals SET gl_value = ? WHERE gl_name = ?', [$apiLogOption, 'api_log_option']);
     sqlStatement('UPDATE openemr_postcalendar_categories SET aco_spec = ? WHERE pc_catid = 5', [$category]);
-    sqlStatement('DELETE FROM patient_tracker_element WHERE pt_tracker_id IN (SELECT id FROM patient_tracker WHERE pid IN (920001, 920002))');
     sqlStatement('DELETE FROM patient_tracker WHERE pid IN (920001, 920002)');
     sqlStatement('DELETE FROM openemr_postcalendar_events WHERE pc_eid BETWEEN 920001 AND 920020');
     sqlStatement('DELETE FROM form_encounter WHERE pid IN (920001, 920002)');
