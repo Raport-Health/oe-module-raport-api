@@ -1,0 +1,54 @@
+{
+  "resourceType": "OperationDefinition",
+  "id": "raport-visits",
+  "url": "urn:raport:openemr:OperationDefinition:raport-visits",
+  "version": "0.1.0",
+  "name": "RaportVisits",
+  "title": "Calendar providers, clinical encounters and stored appointment links",
+  "status": "draft",
+  "kind": "operation",
+  "experimental": true,
+  "code": "raport-visits",
+  "system": true,
+  "type": false,
+  "instance": false,
+  "affectsState": false,
+  "description": "Requires api:fhir and system/*.$raport-visits. Without parameters returns calendar-qualified providers (username set, authorized=1, calendar=1; inactive users included with active=false). With patient=<uuid> returns every appointment and clinical encounter of that patient. With start and end (inclusive clinic-local days, at most 31) returns every patient appointment dated in the window, every recurring series overlapping it, every clinical encounter dated in it, every encounter those appointments link even when it is dated outside the window, and every appointment currently linked to one of those encounters. An appointment link is the Flow Board tracker row matching the appointment's current patient, date, start time and id; a blank encounter is unlinked. Several appointments may link one encounter. One appointment linked to more than one encounter, or a link to a missing, duplicate or other-patient encounter, fails with 409. Recurring series are flagged, never expanded or linked. Dates and times are clinic-local wall clock without offsets. A record without a usable UUID or date fails with 409. complete=true means no row was omitted: any access denial fails the request with 403. Repeated query keys collapse to the last value before the module sees them.",
+  "parameter": [
+    { "name": "patient", "use": "in", "min": 0, "max": "1", "type": "string", "documentation": "Patient UUID. Patient history mode." },
+    { "name": "start", "use": "in", "min": 0, "max": "1", "type": "date", "documentation": "First clinic-local day. Requires end." },
+    { "name": "end", "use": "in", "min": 0, "max": "1", "type": "date", "documentation": "Last clinic-local day, inclusive. At most 31 days counting both ends." },
+    { "name": "complete", "use": "out", "min": 1, "max": "1", "type": "boolean" },
+    { "name": "provider", "use": "out", "min": 0, "max": "*", "part": [
+      { "name": "uuid", "use": "out", "min": 1, "max": "1", "type": "string" },
+      { "name": "id", "use": "out", "min": 1, "max": "1", "type": "integer", "documentation": "Native users.id." },
+      { "name": "username", "use": "out", "min": 0, "max": "1", "type": "string" },
+      { "name": "given", "use": "out", "min": 0, "max": "1", "type": "string" },
+      { "name": "family", "use": "out", "min": 0, "max": "1", "type": "string" },
+      { "name": "npi", "use": "out", "min": 0, "max": "1", "type": "string", "documentation": "Stored value, not validated." },
+      { "name": "active", "use": "out", "min": 1, "max": "1", "type": "boolean" },
+      { "name": "calendarOwner", "use": "out", "min": 1, "max": "1", "type": "boolean" }
+    ] },
+    { "name": "encounter", "use": "out", "min": 0, "max": "*", "part": [
+      { "name": "uuid", "use": "out", "min": 1, "max": "1", "type": "string" },
+      { "name": "patient", "use": "out", "min": 1, "max": "1", "type": "string" },
+      { "name": "date", "use": "out", "min": 1, "max": "1", "type": "string", "documentation": "YYYY-MM-DD HH:MM:SS clinic-local wall clock." },
+      { "name": "provider", "use": "out", "min": 0, "max": "1", "type": "string", "documentation": "Provider UUID." },
+      { "name": "reason", "use": "out", "min": 0, "max": "1", "type": "string" }
+    ] },
+    { "name": "appointment", "use": "out", "min": 0, "max": "*", "part": [
+      { "name": "uuid", "use": "out", "min": 1, "max": "1", "type": "string" },
+      { "name": "patient", "use": "out", "min": 1, "max": "1", "type": "string" },
+      { "name": "date", "use": "out", "min": 1, "max": "1", "type": "date" },
+      { "name": "time", "use": "out", "min": 0, "max": "1", "type": "time" },
+      { "name": "end", "use": "out", "min": 0, "max": "1", "type": "string", "documentation": "YYYY-MM-DD HH:MM:SS clinic-local wall clock: the date plus the stored end time, on the next day for an end of 24:00 or later. Absent without a stored end time." },
+      { "name": "provider", "use": "out", "min": 0, "max": "1", "type": "string", "documentation": "Provider UUID." },
+      { "name": "status", "use": "out", "min": 1, "max": "1", "type": "code", "documentation": "The native FHIR Appointment status of pc_apptstatus: proposed, pending, booked, arrived, checked-in, fulfilled, cancelled, noshow or waitlist." },
+      { "name": "typeCode", "use": "out", "min": 0, "max": "1", "type": "string", "documentation": "Appointment category constant id, as native FHIR Appointment codes appointmentType." },
+      { "name": "typeDisplay", "use": "out", "min": 0, "max": "1", "type": "string", "documentation": "Appointment category name." },
+      { "name": "location", "use": "out", "min": 0, "max": "1", "type": "string", "documentation": "Location UUID of the appointment facility, as native FHIR Appointment names it. Absent when the facility has none." },
+      { "name": "recurring", "use": "out", "min": 1, "max": "1", "type": "boolean" },
+      { "name": "encounter", "use": "out", "min": 0, "max": "1", "type": "string", "documentation": "Linked encounter UUID." }
+    ] }
+  ]
+}

@@ -1,0 +1,38 @@
+name: raport-openemr-module
+services:
+  mysql:
+    image: mariadb:10.11@sha256:7f22313fc130a377a44999965bcb0a08dd5b21e8502824c1b864f792f9bc66ab
+    environment:
+      MYSQL_ROOT_PASSWORD: ${LOCAL_DB_PASSWORD:?Generate local/.env first}
+    volumes:
+      - ./artifacts/database:/var/lib/mysql
+    healthcheck:
+      test: [CMD, healthcheck.sh, --connect, --innodb_initialized]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+  openemr:
+    image: openemr/openemr:8.0.0@sha256:29e057095eabf76f903b930e24e355e605941fd9fbae50b8dccb860051a4eadf
+    entrypoint: [sh, /module-local/start.sh]
+    tmpfs:
+      - /tmp:size=268435456,mode=1777
+      - /var/log/apache2:size=33554432
+    ports:
+      - "127.0.0.1:19443:443"
+      - "127.0.0.1:18080:80"
+    environment:
+      MYSQL_HOST: mysql
+      MYSQL_ROOT_PASS: ${LOCAL_DB_PASSWORD:?Generate local/.env first}
+      MYSQL_PASS: ${LOCAL_DB_PASSWORD:?Generate local/.env first}
+      OE_USER: admin
+      OE_PASS: ${LOCAL_ADMIN_PASSWORD:?Generate local/.env first}
+      OPENEMR_SETTING_rest_fhir_api: "1"
+      OPENEMR_SETTING_rest_system_scopes_api: "1"
+      OPENEMR_SETTING_site_addr_oath: "https://localhost:19443"
+    depends_on:
+      mysql:
+        condition: service_healthy
+    volumes:
+      - ./artifacts/sites:/var/www/localhost/htdocs/openemr/sites
+      - ..:/var/www/localhost/htdocs/openemr/interface/modules/custom_modules/oe-module-raport-api:ro
+      - .:/module-local

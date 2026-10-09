@@ -1,0 +1,36 @@
+{
+  "resourceType": "OperationDefinition",
+  "id": "raport-problems",
+  "url": "urn:raport:openemr:OperationDefinition:raport-problems",
+  "version": "0.1.0",
+  "name": "RaportProblems",
+  "title": "Problem list with parsed diagnosis codes and encounter links",
+  "status": "draft",
+  "kind": "operation",
+  "experimental": true,
+  "code": "raport-problems",
+  "resource": [
+    "Patient"
+  ],
+  "system": false,
+  "type": false,
+  "instance": true,
+  "affectsState": false,
+  "description": "Requires api:fhir and system/Patient.$raport-problems. Takes no parameters. Returns every active problem list row of the patient (lists type medical_problem, activity 1), resolved ones included, sorted by lower-case UUID. Each diagnosis item (lists.diagnosis split on ';', blank items and exact repeats dropped, source order kept) is parsed with the host CodeTypesService: parseCode for type and code, getSystemForCodeType for the FHIR system and lookup_code_description for the description, which is empty unless the host has that code table installed. Encounter links are the issue_encounter rows of the problem. A row without a usable UUID, a blank title, a diagnosis item without a type or code, and a link to a missing, duplicate-numbered or other-patient encounter fail with 409. complete=true means no row was omitted: any access denial fails the request with 403.",
+  "parameter": [
+    { "name": "complete", "use": "out", "min": 1, "max": "1", "type": "boolean" },
+    { "name": "problem", "use": "out", "min": 0, "max": "*", "part": [
+      { "name": "uuid", "use": "out", "min": 1, "max": "1", "type": "string" },
+      { "name": "title", "use": "out", "min": 1, "max": "1", "type": "string", "documentation": "As stored, never blank." },
+      { "name": "begdate", "use": "out", "min": 0, "max": "1", "type": "string", "documentation": "As stored, YYYY-MM-DD HH:MM:SS. Absent when null or a zero date." },
+      { "name": "enddate", "use": "out", "min": 0, "max": "1", "type": "string", "documentation": "As stored, YYYY-MM-DD HH:MM:SS. Absent when null or a zero date; present on a resolved problem." },
+      { "name": "code", "use": "out", "min": 0, "max": "*", "part": [
+        { "name": "type", "use": "out", "min": 1, "max": "1", "type": "string", "documentation": "OpenEMR code type, such as ICD10 or SNOMED-CT." },
+        { "name": "code", "use": "out", "min": 1, "max": "1", "type": "string" },
+        { "name": "system", "use": "out", "min": 0, "max": "1", "type": "string", "documentation": "The host's FHIR system for the code type. Absent for a type the host does not map." },
+        { "name": "description", "use": "out", "min": 0, "max": "1", "type": "string", "documentation": "From the host's installed code table. Absent when the code is not found there." }
+      ] },
+      { "name": "encounter", "use": "out", "min": 0, "max": "*", "type": "string", "documentation": "Linked encounter UUID, in UUID order." }
+    ] }
+  ]
+}

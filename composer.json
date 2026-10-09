@@ -1,0 +1,16 @@
+{
+  "name": "raport/oe-module-raport-api",
+  "description": "Encounter document, visit, problem list and lab read operations for OpenEMR",
+  "type": "openemr-module",
+  "license": "MIT",
+  "require": {
+    "php": ">=8.2",
+    "openemr/oe-module-installer-plugin": "^0.1.0"
+  },
+  "autoload": {
+    "psr-4": {"Raport\\OpenEmr\\": "src/"}
+  },
+  "archive": {
+    "exclude": ["/local", "/tests", "/.git", "**/.DS_Store"]
+  }
+}

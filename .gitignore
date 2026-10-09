@@ -1,0 +1,5 @@
+/local/.env
+/local/artifacts/
+/vendor/
+/composer.lock
+.DS_Store
