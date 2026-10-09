@@ -24,7 +24,7 @@ final class Problems
     public function read(string $patientUuid, HttpRestRequest $request): array
     {
         $this->user = $request->getSession()->get('authUser');
-        $this->allow('patients', 'med');
+        $this->allow('patients|med');
         // The backfill commits its own transactions, so it runs before the snapshot.
         UuidRegistry::createMissingUuidsForTables(['lists', 'patient_data', 'form_encounter']);
         QueryUtils::sqlStatementThrowException('SET TRANSACTION ISOLATION LEVEL REPEATABLE READ');
@@ -34,7 +34,7 @@ final class Problems
             $pid = (int) $patient['pid'];
             $request->attributes->set('raportPatientId', $pid);
             if ($patient['squad']) {
-                $this->allow('squads', $patient['squad']);
+                $this->allow('squads|' . $patient['squad']);
             }
             return $this->parameters($pid);
         });
@@ -97,9 +97,9 @@ final class Problems
         return ['resourceType' => 'Parameters', 'parameter' => $parameters];
     }
 
-    private function allow(string $section, string $value): void
+    private function allow(string $spec): void
     {
-        if (!AclMain::aclCheckCore($section, $value, $this->user)) {
+        if (!AclMain::aclCheckAcoSpec($spec, $this->user)) {
             throw new OperationProblem(403, 'forbidden', 'The system principal cannot read this problem list.');
         }
     }

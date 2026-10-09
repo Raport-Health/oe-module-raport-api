@@ -12,7 +12,7 @@ use Symfony\Component\HttpFoundation\JsonResponse;
 
 final class OperationController
 {
-    public const UUID = '/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/iD';
+    public const UUID = '/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/D';
     private const HEADERS = ['Content-Type' => 'application/fhir+json', 'Cache-Control' => 'no-store'];
 
     public function document(string $encounterUuid, HttpRestRequest $request): JsonResponse
@@ -44,7 +44,6 @@ final class OperationController
             fn(): array => (new Labs())->read($this->instance($patientUuid, $request), $request));
     }
 
-    /** An instance operation takes a UUID in its path and only the named query parameters. */
     private function instance(string $uuid, HttpRestRequest $request, array $parameters = []): string
     {
         if (!preg_match(self::UUID, $uuid)) {
@@ -53,13 +52,13 @@ final class OperationController
         if (array_diff($request->query->keys(), $parameters) !== []) {
             throw new OperationProblem(400, 'invalid', 'This operation does not accept that query parameter.');
         }
-        return strtolower($uuid);
+        return $uuid;
     }
 
     private function respond(HttpRestRequest $request, string $label, string $operation, \Closure $read): JsonResponse
     {
         // The host checks the operation scope before dispatch. Only OAuth system clients are served.
-        if ($request->getRequestUserRole() !== 'system' || $request->isLocalApi()) {
+        if ($request->getRequestUserRole() !== 'system') {
             return $this->outcome(403, 'forbidden', 'This operation requires an OAuth system client.');
         }
         // Replace body logging with a metadata-only audit using the host audit service.

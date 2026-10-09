@@ -12,13 +12,7 @@ use Raport\OpenEmr\Bootstrap;
 
 function problemsCall(string $token, string $patient, int $expected, string $label, string $query = ''): array
 {
-    [$status, $body] = callApi('/apis/default/fhir/Patient/' . $patient . '/$raport-problems' . $query, token: $token);
-    $result = json_decode($body, true, 512, JSON_THROW_ON_ERROR);
-    $shape = $expected === 200
-        ? $result['parameter'][0] === ['name' => 'complete', 'valueBoolean' => true]
-        : $result['resourceType'] === 'OperationOutcome' && !isset($result['parameter']);
-    check($status === $expected && $shape, "$label: HTTP $status" . ($status !== $expected ? ' (' . ($result['issue'][0]['diagnostics'] ?? 'no diagnostics') . ')' : ''));
-    return $result;
+    return operationCall('/apis/default/fhir/Patient/' . $patient . '/$raport-problems' . $query, $token, $expected, $label);
 }
 // uuid => part name => value, in response order; code and encounter parts stay lists.
 function problemRows(array $result): array
@@ -119,16 +113,6 @@ try {
     $other = problemRows(problemsCall($problemsToken, $p2, 200, 'PR10 other patient'));
     check(array_keys($other) === [$uuidOf('lists', 930007)], 'PR10 P2 sees only its own problem');
 
-    [$status, $metadata] = callApi('/apis/default/fhir/metadata');
-    $advertised = $status === 200;
-    foreach (json_decode($metadata, true, 512, JSON_THROW_ON_ERROR)['rest'] as $rest) {
-        $patientResource = array_values(array_filter($rest['resource'], fn($resource) => $resource['type'] === 'Patient'))[0];
-        $advertised = $advertised && in_array(['name' => 'raport-problems', 'definition' => 'urn:raport:openemr:OperationDefinition:raport-problems'], $patientResource['operation'] ?? [], true);
-    }
-    check($advertised, 'PR11 CapabilityStatement advertises the problems operation on Patient');
-    [$status, $definitions] = callApi('/apis/default/fhir/OperationDefinition');
-    $ids = array_count_values(array_map(fn($entry) => (string) ($entry['resource']['id'] ?? ''), json_decode($definitions, true, 512, JSON_THROW_ON_ERROR)['entry']));
-    check($status === 200 && ($ids['raport-problems'] ?? 0) === 1, 'PR11 OperationDefinition list holds the problems definition once');
 
     sqlStatement('UPDATE globals SET gl_value = 2 WHERE gl_name = ?', ['api_log_option']);
     $lastLog = (int) sqlQuery('SELECT COALESCE(MAX(id), 0) AS id FROM api_log')['id'];
@@ -152,16 +136,7 @@ try {
     sqlStatement('UPDATE patient_data SET squad = ? WHERE pid = 930001', ['raport-restricted']);
     problemsCall($problemsToken, $p1, 403, 'PR13 patient squad');
 } finally {
-    if ($testAcl !== null && $testAcl !== false) {
-        $gacl->del_acl($testAcl);
-    }
-    if ($testGroup !== null) {
-        $gacl->del_group($testGroup, true, 'ARO');
-    }
-    foreach ($groups as $group) {
-        $gacl->add_group_object($group, 'users', 'oe-system', 'ARO');
-    }
-    $gacl->clear_cache();
+    restoreSystemAcl($gacl, $groups, $testAcl, $testGroup);
     sqlStatement('UPDATE globals SET gl_value = ? WHERE gl_name = ?', [$apiLogOption, 'api_log_option']);
     sqlStatement('DELETE FROM issue_encounter WHERE pid IN (930001, 930002) OR list_id BETWEEN 930001 AND 930010');
     sqlStatement('DELETE FROM lists WHERE id BETWEEN 930001 AND 930010 OR pid IN (930001, 930002)');

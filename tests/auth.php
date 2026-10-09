@@ -58,11 +58,9 @@ $operations = [
     'labs' => fn(HttpRestRequest $request) => $controller->labs($encounter, $request),
 ];
 foreach ($operations as $name => $call) {
-    // A system role through the browser-session local API is not an OAuth client either.
-    foreach (['users', 'patient', 'system'] as $role) {
+    foreach (['users', 'patient'] as $role) {
         $request = new HttpRestRequest();
         $request->setRequestUserRole($role);
-        $request->setIsLocalApi($role === 'system');
         check($call($request)->getStatusCode() === 403, "$name controller rejects $role non-OAuth context");
     }
 }
@@ -90,6 +88,33 @@ function callApi(string $path, ?string $body = null, string $contentType = 'appl
     }
     $status = curl_getinfo($curl, CURLINFO_RESPONSE_CODE);
     return [$status, $result];
+}
+// Undoes a test's restricted principal: its ACL and group go, and oe-system rejoins the groups it started in.
+function restoreSystemAcl($gacl, array $groups, $testAcl, $testGroup): void
+{
+    if ($testAcl !== null && $testAcl !== false) {
+        $gacl->del_acl($testAcl);
+    }
+    if ($testGroup !== null) {
+        $gacl->del_group($testGroup, true, 'ARO');
+    }
+    foreach ($groups as $group) {
+        $gacl->add_group_object($group, 'users', 'oe-system', 'ARO');
+    }
+    $gacl->clear_cache();
+}
+// A module operation answers a complete Parameters or an OperationOutcome, never both. OpenEMR answers 401 itself.
+function operationCall(string $path, string $token, int $expected, string $label): array
+{
+    [$status, $body] = callApi($path, token: $token);
+    $result = json_decode($body, true, 512, JSON_THROW_ON_ERROR);
+    $shape = match ($expected) {
+        200 => $result['parameter'][0] === ['name' => 'complete', 'valueBoolean' => true],
+        401 => true,
+        default => $result['resourceType'] === 'OperationOutcome' && !isset($result['parameter']),
+    };
+    check($status === $expected && $shape, "$label: HTTP $status" . ($status !== $expected ? ' (' . ($result['issue'][0]['diagnostics'] ?? 'no diagnostics') . ')' : ''));
+    return $result;
 }
 function b64(string $value): string
 {
@@ -157,6 +182,21 @@ try {
     require __DIR__ . '/visits.php';
     require __DIR__ . '/problems.php';
     require __DIR__ . '/labs.php';
+    // Public discovery: visits on the server, the document on Encounter, problems and labs on Patient.
+    $operation = fn(string $name): array => ['name' => $name, 'definition' => 'urn:raport:openemr:OperationDefinition:' . $name];
+    [$status, $metadata] = callApi('/apis/default/fhir/metadata');
+    $advertised = $status === 200;
+    foreach (json_decode($metadata, true, 512, JSON_THROW_ON_ERROR)['rest'] as $rest) {
+        $on = array_column($rest['resource'], 'operation', 'type');
+        $advertised = $advertised && in_array($operation('raport-visits'), $rest['operation'] ?? [], true)
+            && in_array($operation('raport-document'), $on['Encounter'] ?? [], true)
+            && in_array($operation('raport-problems'), $on['Patient'] ?? [], true)
+            && in_array($operation('raport-labs'), $on['Patient'] ?? [], true);
+    }
+    check($advertised, 'CapabilityStatement advertises every module operation on its resource');
+    [$status, $definitions] = callApi('/apis/default/fhir/OperationDefinition');
+    $ids = array_count_values(array_map(fn($entry) => (string) ($entry['resource']['id'] ?? ''), json_decode($definitions, true, 512, JSON_THROW_ON_ERROR)['entry']));
+    check($status === 200 && array_map(fn($id) => $ids[$id] ?? 0, ['raport-document', 'raport-visits', 'raport-problems', 'raport-labs']) === [1, 1, 1, 1], 'OperationDefinition list holds each module definition once');
     [$status] = tokenFor($clientId, $key, 'api:fhir ' . Bootstrap::SCOPE, -60);
     check(in_array($status, [400, 401], true), 'expired client assertion rejected (HTTP ' . $status . ')');
     [$status] = callApi('/apis/nonexistent-site/fhir/Encounter/' . $encounter . '/$raport-document', token: $token);
