@@ -134,7 +134,7 @@ final class EncounterDocument
     {
         $this->allow('patients|demo');
         $this->allow('encounters|notes');
-        $encounter = sqlQuery('SELECT e.encounter, e.pid, e.date, e.reason, e.sensitivity, e.pc_catid, p.uuid AS patient_uuid, p.fname, p.lname, p.DOB, p.squad FROM form_encounter e JOIN patient_data p ON p.pid = e.pid WHERE e.uuid = ?', [UuidRegistry::uuidToBytes($uuid)]);
+        $encounter = sqlQuery('SELECT e.encounter, e.pid, e.date, e.sensitivity, e.pc_catid, p.uuid AS patient_uuid, p.fname, p.lname, p.DOB, p.squad FROM form_encounter e JOIN patient_data p ON p.pid = e.pid WHERE e.uuid = ?', [UuidRegistry::uuidToBytes($uuid)]);
         if (!$encounter) {
             throw new OperationProblem(404, 'not-found', 'Encounter not found.');
         }
@@ -175,27 +175,31 @@ final class EncounterDocument
             if (!$isLbf && !in_array($form['formdir'], ['clinical_notes', 'procedure_order', ...self::ROW_FORMS], true)) {
                 throw new OperationProblem(422, 'not-supported', 'Encounter contains an unsupported note form: ' . $form['formdir'] . '.');
             }
-            // All LBF types share one lbf_data keyspace, including deleted registrations.
-            $owners = $isLbf
-                ? QueryUtils::fetchRecords("SELECT id FROM forms WHERE form_id = ? AND formdir LIKE 'LBF%'", [$form['form_id']])
-                : QueryUtils::fetchRecords('SELECT id FROM forms WHERE form_id = ? AND formdir = ?', [$form['form_id'], $form['formdir']]);
+            // All LBF types share one lbf_data keyspace, including deleted registrations. CCDA import registers each
+            // encounter's clinical notes under one shared form_id, so those rows are read by encounter, as the native report does.
+            $owners = match (true) {
+                $isLbf => QueryUtils::fetchRecords("SELECT id FROM forms WHERE form_id = ? AND formdir LIKE 'LBF%'", [$form['form_id']]),
+                $form['formdir'] === 'clinical_notes' => QueryUtils::fetchRecords('SELECT id FROM forms WHERE form_id = ? AND formdir = ? AND pid = ? AND encounter = ?', [$form['form_id'], $form['formdir'], $encounter['pid'], $encounter['encounter']]),
+                default => QueryUtils::fetchRecords('SELECT id FROM forms WHERE form_id = ? AND formdir = ?', [$form['form_id'], $form['formdir']]),
+            };
             if (count($owners) !== 1 || (string) $owners[0]['id'] !== (string) $form['id']) {
                 throw new OperationProblem(409, 'conflict', 'A note has ambiguous encounter ownership.');
             }
             $source = $this->source($form, $encounter, $isLbf);
             $html = $source === null ? null : $this->render($form, $encounter, $isLbf, $source);
-            // An inactive order, or a form saved blank, has nothing to print.
-            if ($html === null) {
+            $signatures = $this->signatures('forms', $form['id']);
+            // An inactive order, or a form saved blank, has nothing to print. A signature on one may carry an amendment.
+            if ($html === null && $signatures === []) {
                 $excluded[] = $form;
                 continue;
             }
             $signable = (new \ESign\Form_Factory($form['id'], $form['formdir'], $encounter['encounter']))->createSignable();
             $notes[] = ['form' => $form, 'source' => $source,
-                'signatures' => $this->signatures('forms', $form['id']), 'locked' => $signable->isLocked(),
-                'html' => $html];
+                'signatures' => $signatures, 'locked' => $signable->isLocked(),
+                'html' => $html ?? ''];
         }
         // Bump 'format' whenever documentHtml changes: callers keep their PDF while the revision matches.
-        return ['format' => 'raport-document-1', 'style' => self::STYLE, 'encounter' => $encounter, 'notes' => $notes, 'excluded' => $excluded,
+        return ['format' => 'raport-document-2', 'style' => self::STYLE, 'encounter' => $encounter, 'notes' => $notes, 'excluded' => $excluded,
             'encounterSignatures' => $this->signatures('form_encounter', $encounter['encounter'])];
     }
 
@@ -268,7 +272,7 @@ final class EncounterDocument
             return (new Labs())->encounterOrder((int) $form['form_id'], (int) $encounter['pid'], (int) $encounter['encounter'], $user);
         }
         if ($form['formdir'] === 'clinical_notes') {
-            $rows = QueryUtils::fetchRecords('SELECT * FROM form_clinical_notes WHERE form_id = ? ORDER BY id', [$form['form_id']]);
+            $rows = QueryUtils::fetchRecords('SELECT * FROM form_clinical_notes WHERE form_id = ? AND pid = ? AND encounter = ? ORDER BY id', [$form['form_id'], $encounter['pid'], $encounter['encounter']]);
         } else {
             // The directory is one of ROW_FORMS, never request input.
             $rows = QueryUtils::fetchRecords('SELECT * FROM `form_' . $form['formdir'] . '` WHERE id = ?', [$form['form_id']]);
@@ -409,15 +413,15 @@ final class EncounterDocument
     {
         $encounter = $snapshot['encounter'];
         $escape = $this->escape(...);
-        $signer = fn(array $signature) => $escape(trim($signature['fname'] . ' ' . $signature['lname']));
-        $html = '<html><head><meta charset="UTF-8"><style>' . self::STYLE . '</style></head><body><h1>Encounter notes</h1><p>' . $escape($encounter['fname'] . ' ' . $encounter['lname']) . ' | DOB: ' . $escape($encounter['DOB']) . '<br>Encounter: ' . $escape($encounter['encounter']) . ' | Date (clinic local): ' . $escape($encounter['date']) . '</p><p class="provenance">Current rendering. Signature records are evidence of recorded actions, not cryptographic verification of this PDF or a historical snapshot.</p>';
+        $signed = fn(string $what, array $signature) => '<p class="provenance">' . $what . ' recorded: ' . $escape(trim($signature['fname'] . ' ' . $signature['lname'])) . ' at ' . $escape($signature['datetime']) . '. ' . $escape($signature['amendment']) . '</p>';
+        $html ='<html><head><meta charset="UTF-8"><style>' . self::STYLE . '</style></head><body><h1>Encounter notes</h1><p>' . $escape($encounter['fname'] . ' ' . $encounter['lname']) . ' | DOB: ' . $escape($encounter['DOB']) . '<br>Encounter: ' . $escape($encounter['encounter']) . ' | Date (clinic local): ' . $escape($encounter['date']) . '</p><p class="provenance">Current rendering. Signature records are evidence of recorded actions, not cryptographic verification of this PDF or a historical snapshot.</p>';
         foreach ($snapshot['encounterSignatures'] as $signature) {
-            $html .= '<p class="provenance">Encounter signature recorded: ' . $signer($signature) . ' at ' . $escape($signature['datetime']) . '</p>';
+            $html .= $signed('Encounter signature', $signature);
         }
         foreach ($snapshot['notes'] as $note) {
             $html .= '<h2>' . $escape($note['form']['form_name']) . '</h2><p class="provenance">Form registration ' . $escape($note['form']['id']) . ' | Author: ' . $escape($note['form']['user']) . ' | Registered (clinic local): ' . $escape($note['form']['date']) . ' | Locked: ' . ($note['locked'] ? 'yes' : 'no') . '</p>';
             foreach ($note['signatures'] as $signature) {
-                $html .= '<p class="provenance">Signature recorded: ' . $signer($signature) . ' at ' . $escape($signature['datetime']) . '. ' . $escape($signature['amendment']) . '</p>';
+                $html .= $signed('Signature', $signature);
             }
             $html .= $note['html'];
         }

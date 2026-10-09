@@ -50,12 +50,13 @@ $moduleToken = $granted['access_token'];
 $p1 = '30000000-0000-4000-8000-000000000001';
 $p2 = '30000000-0000-4000-8000-000000000002';
 $unknownPatient = '30000000-0000-4000-8000-000000000003';
-$fixtureRows = "SELECT pid FROM patient_data WHERE pid IN (920001, 920002) OR uuid IN (?, ?, ?)
+$p3 = '30000000-0000-4000-8000-000000000004';
+$fixtureRows = "SELECT pid FROM patient_data WHERE pid IN (920001, 920002, 920003) OR uuid IN (?, ?, ?, ?)
     UNION ALL SELECT pid FROM patient_tracker WHERE pid IN (920001, 920002)
     UNION ALL SELECT pc_eid FROM openemr_postcalendar_events WHERE pc_eid BETWEEN 920001 AND 920020
     UNION ALL SELECT id FROM form_encounter WHERE id BETWEEN 920001 AND 920010 OR encounter BETWEEN 920101 AND 920110 OR encounter = 999999
     UNION ALL SELECT id FROM users WHERE username LIKE 'raport-visits-%'";
-$fixtureBinds = array_map(fn($uuid) => UuidRegistry::uuidToBytes($uuid), [$p1, $p2, $unknownPatient]);
+$fixtureBinds = array_map(fn($uuid) => UuidRegistry::uuidToBytes($uuid), [$p1, $p2, $unknownPatient, $p3]);
 check(!sqlQuery($fixtureRows, $fixtureBinds), 'visits fixtures are unused');
 $gacl = new GaclApi();
 $groups = $gacl->get_object_groups($gacl->get_object_id('users', 'oe-system', 'ARO'), 'ARO', 'NO_RECURSE');
@@ -68,7 +69,8 @@ try {
     foreach ([['x', 1, 1, 1, '1234567893'], ['y', 1, 1, 0, null], ['staff', 0, 0, 1, null]] as [$name, $authorized, $calendar, $active, $npi]) {
         $users[$name] = (int) sqlInsert('INSERT INTO users (username, fname, lname, authorized, calendar, active, npi) VALUES (?, ?, ?, ?, ?, ?, ?)', ['raport-visits-' . $name, 'Synthetic', 'Provider ' . strtoupper($name), $authorized, $calendar, $active, $npi]);
     }
-    foreach ([[920001, $p1, 'P1'], [920002, $p2, 'P2']] as [$pid, $uuid, $name]) {
+    // P3 has no visits.
+    foreach ([[920001, $p1, 'P1'], [920002, $p2, 'P2'], [920003, $p3, 'P3']] as [$pid, $uuid, $name]) {
         sqlStatement('INSERT INTO patient_data (pid, uuid, pubpid, fname, lname, DOB) VALUES (?, ?, ?, ?, ?, ?)', [$pid, UuidRegistry::uuidToBytes($uuid), 'RAPORT-VISITS-' . $name, $name, 'Synthetic Patient', '2000-01-01']);
     }
     // Appointment and encounter UUIDs start NULL so the operation's backfill is exercised.
@@ -109,13 +111,13 @@ try {
     check($nullBefore === 8 && $nullUuids() === 0, 'V5 the 8 NULL fixture UUIDs were backfilled, and V3 and V4 returned the stored values');
 
     $facility = sqlQuery("SELECT f.id, m.uuid FROM facility f JOIN uuid_mapping m ON m.target_uuid = f.uuid AND m.resource = 'Location' ORDER BY f.id LIMIT 1");
-    sqlStatement("UPDATE openemr_postcalendar_events SET pc_apptstatus = '@', pc_endTime = '24:30:00', pc_facility = ? WHERE pc_eid = 920001", [$facility['id']]);
+    sqlStatement("UPDATE openemr_postcalendar_events SET pc_apptstatus = '@', pc_endTime = '25:30:00', pc_facility = ? WHERE pc_eid = 920001", [$facility['id']]);
     sqlStatement("UPDATE openemr_postcalendar_events SET pc_apptstatus = 'unknown' WHERE pc_eid = 920002");
     $unknown = visitsCall($moduleToken, ['patient' => $p1], 409, 'V21 a status OpenEMR does not define');
     check($unknown['issue'][0]['diagnostics'] === "Appointment $b has an unsupported status.", 'V21 diagnostics name only the appointment UUID');
     sqlStatement("UPDATE openemr_postcalendar_events SET pc_apptstatus = '^' WHERE pc_eid = 920002");
     $native = visitRows(visitsCall($moduleToken, ['patient' => $p1], 200, 'V21 native appointment fields'))['appointment'];
-    check([$native[$a]['status'], $native[$a]['end'], $native[$a]['location'], $native[$b]['status']] === ['arrived', '2031-01-07 00:30:00', UuidRegistry::uuidToString($facility['uuid']), 'pending'],
+    check([$native[$a]['status'], $native[$a]['end'], $native[$a]['location'], $native[$b]['status']] === ['arrived', '2031-01-07 01:30:00', UuidRegistry::uuidToString($facility['uuid']), 'pending'],
         'V21 status, an end past midnight and the facility Location UUID follow native FHIR Appointment');
 
     $addAppointment(920004, 920001, 'x', '2031-02-01', '10:00:00'); // L, dated outside the window
@@ -222,8 +224,9 @@ try {
     sqlStatement('UPDATE form_encounter SET sensitivity = ? WHERE id = 920001', ['raport-restricted']);
     visitsCall($moduleToken, ['patient' => $p1], 403, 'V15 sensitive encounter');
     sqlStatement('UPDATE form_encounter SET sensitivity = NULL WHERE id = 920001');
-    sqlStatement('UPDATE patient_data SET squad = ? WHERE pid = 920001', ['raport-restricted']);
+    sqlStatement('UPDATE patient_data SET squad = ? WHERE pid IN (920001, 920003)', ['raport-restricted']);
     visitsCall($moduleToken, ['patient' => $p1], 403, 'V15 patient squad');
+    visitsCall($moduleToken, ['patient' => $p3], 403, 'V15 patient squad with no visits');
     sqlStatement('UPDATE patient_data SET squad = ? WHERE pid = 920001', ['']);
     sqlStatement('UPDATE openemr_postcalendar_categories SET aco_spec = ? WHERE pc_catid = 5', ['admin|super']);
     visitsCall($moduleToken, ['patient' => $p1], 403, 'V15 encounter category ACO');
@@ -234,7 +237,7 @@ try {
     sqlStatement('DELETE FROM patient_tracker WHERE pid IN (920001, 920002)');
     sqlStatement('DELETE FROM openemr_postcalendar_events WHERE pc_eid BETWEEN 920001 AND 920020');
     sqlStatement('DELETE FROM form_encounter WHERE pid IN (920001, 920002)');
-    sqlStatement('DELETE FROM patient_data WHERE pid IN (920001, 920002)');
+    sqlStatement('DELETE FROM patient_data WHERE pid IN (920001, 920002, 920003)');
     sqlStatement("DELETE FROM users WHERE username LIKE 'raport-visits-%'");
 }
 check(!sqlQuery($fixtureRows, $fixtureBinds), 'visits fixtures removed');

@@ -103,15 +103,23 @@ try {
     $again = exported($encounterA, $token);
     check(revisionOf($first) === revisionOf($again), 'unchanged export has stable revision');
     check(outputValue($again, 'document', 'resource')['identifier'] === $doc['identifier'], 'unchanged logical document identity');
+    sqlStatement('UPDATE form_encounter SET reason = ? WHERE encounter = 910001', ['Edited unprinted reason']);
+    check(revisionOf(exported($encounterA, $token)) === revisionOf($again), 'an edit the PDF does not print keeps the revision');
     $beta = exported($encounterB, $token);
     check(outputValue($beta, 'noteCount', 'valueUnsignedInt') === 1, 'other patient has only its own note');
     file_put_contents('/module-local/artifacts/export-beta.pdf', base64_decode(outputValue($beta, 'document', 'resource')['content'][0]['attachment']['data'], true));
     // A layout note saved blank stores no lbf_data rows. Removed again: it would bound the history test's first note.
     $blankLbf = sqlInsert('INSERT INTO forms (pid, encounter, form_id, formdir, form_name) VALUES (910001, 910003, 910004, ?, ?)', [$layout, 'Layout Note']);
     $empty = exported($encounterC, $token);
+    require_once $GLOBALS['srcdir'] . '/ESign/Form/Factory.php';
+    (new \ESign\Form_Factory($blankLbf, $layout, 910003))->createSignable()->sign(1, false, 'Synthetic blank note amendment');
+    $signedBlank = exported($encounterC, $token);
+    sqlStatement('DELETE FROM esign_signatures WHERE `table` = ? AND tid = ?', ['forms', $blankLbf]);
     sqlStatement('DELETE FROM forms WHERE id = ?', [$blankLbf]);
     file_put_contents('/module-local/artifacts/export-empty.json', json_encode($empty, JSON_THROW_ON_ERROR));
     check(outputValue($empty, 'noteCount', 'valueUnsignedInt') === 0 && !in_array('document', array_column($empty['parameter'], 'name'), true) && excludedTypes($empty) === [$layout], 'a blank layout note is excluded, leaving an explicit empty inventory and no PDF');
+    check(outputValue($signedBlank, 'noteCount', 'valueUnsignedInt') === 1 && excludedTypes($signedBlank) === [], 'a signed blank layout note is kept for its signature');
+    file_put_contents('/module-local/artifacts/export-signed-blank.pdf', base64_decode(outputValue($signedBlank, 'document', 'resource')['content'][0]['attachment']['data'], true));
     foreach ([
         ['form_soap', 'UPDATE form_soap SET subjective = ? WHERE id = ?', ['ALPHA EDITED SOAP', $soapId]],
         ['form_clinical_notes', 'UPDATE form_clinical_notes SET description = ? WHERE form_id = 910001', ['ALPHA EDITED CLINICAL']],
@@ -131,8 +139,7 @@ try {
     $changed = exported($encounterA, $token);
     check(revisionOf($changed) !== revisionOf($again), 'layout change changes revision');
     $again = $changed;
-    require_once $GLOBALS['srcdir'] . '/ESign/Form/Factory.php';
-    $lbfRegistration = $fixtures[$layout . '/910001'];
+    $lbfRegistration =$fixtures[$layout . '/910001'];
     $signatureId = (new \ESign\Form_Factory($lbfRegistration, $layout, 910001))->createSignable()->sign(1, true, 'Synthetic signing proof');
     $signed = exported($encounterA, $token);
     file_put_contents('/module-local/artifacts/export-signed.json', json_encode($signed, JSON_THROW_ON_ERROR));
@@ -145,6 +152,7 @@ try {
     (new \ESign\Encounter_Signable(910001))->sign(1,true,'Synthetic encounter sign-off');
     $encounterSigned = exported($encounterA,$token);
     check(revisionOf($encounterSigned)!==revisionOf($signed) && count(array_filter($encounterSigned['parameter'],fn($p)=>$p['name']==='encounterSignature'))===1,'encounter signature is separate evidence and changes revision');
+    file_put_contents('/module-local/artifacts/export-encounter-signed.pdf', base64_decode(outputValue($encounterSigned, 'document', 'resource')['content'][0]['attachment']['data'], true));
     check(notePart($encounterSigned,$fixtures['soap/910001'],'locked','valueBoolean')===true && notePart($encounterSigned,$fixtures['soap/910001'],'signatureRecorded','valueBoolean')===false,'encounter lock does not invent an individual form signature');
     sqlStatement('DELETE FROM esign_signatures WHERE `table` = ? AND tid = 910001',['form_encounter']);
     sqlStatement('UPDATE forms SET deleted = 1 WHERE id = ?', [$fixtures['soap/910001']]);
@@ -212,6 +220,14 @@ try {
     $stale = exported($encounterA, $token, 200, '?knownRevision=' . str_repeat('0', 64));
     check(in_array('document', array_column($stale['parameter'], 'name'), true), 'stale knownRevision returns the PDF');
     exported($encounterA, $token, 400, '?knownRevision=ABC');
+    // CCDA import registers each encounter's clinical notes under one shared form_id.
+    $imported = sqlInsert('INSERT INTO forms (pid, encounter, form_id, formdir, form_name) VALUES (910001, 910003, 910001, ?, ?)', ['clinical_notes', 'Clinical Notes Form']);
+    $importedRow = sqlInsert('INSERT INTO form_clinical_notes (form_id,pid,encounter,date,user,activity,description) VALUES (910001,910001,910003,CURDATE(),?,1,?)', ['admin', 'IMPORTED CLINICAL NOTE']);
+    $sharedA = exported($encounterA, $token);
+    $sharedC = exported($encounterC, $token);
+    sqlStatement('DELETE FROM forms WHERE id = ?', [$imported]);
+    sqlStatement('DELETE FROM form_clinical_notes WHERE id = ?', [$importedRow]);
+    check(revisionOf($sharedA) === revisionOf($current) && outputValue($sharedC, 'noteCount', 'valueUnsignedInt') === 1, 'a clinical-note form_id shared across encounters prints each encounter its own rows');
     $legacy = \OpenEMR\Common\Session\SessionWrapperFactory::getInstance()->getWrapper();
     $legacy->set('pid',910002);
     $GLOBALS['pid']=910002;

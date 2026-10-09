@@ -16,7 +16,8 @@ final class Visits
     // calendar_owner is the host calendar-user rule, which ignores active. It is NULL, so false, when a column is NULL.
     private const PROVIDERS = "SELECT id, uuid, username, fname, lname, npi, active, (username != '' AND authorized = 1 AND calendar = 1) AS calendar_owner FROM users WHERE ";
     // Category and facility Location are joined as the host AppointmentService::search joins them for FHIR Appointment.
-    private const APPOINTMENTS = "SELECT e.pc_eid, e.uuid, e.pc_aid, e.pc_eventDate, e.pc_startTime, e.pc_endTime, e.pc_apptstatus, e.pc_recurrtype, p.pid, p.uuid AS patient_uuid, p.squad, c.pc_constant_id, c.pc_catname, m.uuid AS location_uuid FROM openemr_postcalendar_events e JOIN patient_data p ON p.pid = e.pc_pid LEFT JOIN openemr_postcalendar_categories c ON c.pc_catid = e.pc_catid LEFT JOIN facility f ON f.id = e.pc_facility LEFT JOIN uuid_mapping m ON m.target_uuid = f.uuid AND m.resource = 'Location' WHERE ";
+    // The calendar stores an end past midnight as a TIME of 24:00 or later, so it is added to the date.
+    private const APPOINTMENTS = "SELECT e.pc_eid, e.uuid, e.pc_aid, e.pc_eventDate, e.pc_startTime, TIMESTAMP(e.pc_eventDate, e.pc_endTime) AS end_at, e.pc_apptstatus, e.pc_recurrtype, p.pid, p.uuid AS patient_uuid, p.squad, c.pc_constant_id, c.pc_catname, m.uuid AS location_uuid FROM openemr_postcalendar_events e JOIN patient_data p ON p.pid = e.pc_pid LEFT JOIN openemr_postcalendar_categories c ON c.pc_catid = e.pc_catid LEFT JOIN facility f ON f.id = e.pc_facility LEFT JOIN uuid_mapping m ON m.target_uuid = f.uuid AND m.resource = 'Location' WHERE ";
     // The host FHIR Appointment status of each default pc_apptstatus (FhirAppointmentService::parseOpenEMRRecord). The host
     // reads a clinic's own status as pending; here it fails, since nobody has decided what it means.
     private const STATUS = ['-' => 'proposed', '#' => 'pending', '^' => 'pending', '>' => 'fulfilled', '$' => 'fulfilled', 'AVM' => 'booked', 'SMS' => 'booked', 'EMAIL' => 'booked', '*' => 'booked', '%' => 'cancelled', '!' => 'cancelled', 'x' => 'cancelled', '?' => 'noshow', '~' => 'arrived', '@' => 'arrived', '<' => 'checked-in', '+' => 'checked-in', 'CALL' => 'waitlist'];
@@ -79,8 +80,13 @@ final class Visits
     private function visits(array $scope, HttpRestRequest $request): array
     {
         if (isset($scope['patient'])) {
-            $pid = (int) (QueryUtils::fetchRecords('SELECT pid FROM patient_data WHERE uuid = ?', [UuidRegistry::uuidToBytes($scope['patient'])])[0]['pid']
-                ?? throw new OperationProblem(404, 'not-found', 'Patient not found.'));
+            $patient = QueryUtils::fetchRecords('SELECT pid, squad FROM patient_data WHERE uuid = ?', [UuidRegistry::uuidToBytes($scope['patient'])])[0]
+                ?? throw new OperationProblem(404, 'not-found', 'Patient not found.');
+            // Checked here as well as per row: a patient with no visits has no row to carry it.
+            if ($patient['squad']) {
+                $this->allow('squads|' . $patient['squad']);
+            }
+            $pid = (int) $patient['pid'];
             $request->attributes->set('raportPatientId', $pid);
             $appointments = $this->records(QueryUtils::fetchRecords(self::APPOINTMENTS . 'p.pid = ?', [$pid]), 'pc_eid', 'pc_eventDate');
             $encounters = $this->records(QueryUtils::fetchRecords(self::ENCOUNTERS . 'fe.pid = ?', [$pid]), 'id', 'date');
@@ -204,10 +210,8 @@ final class Visits
             if ($row['pc_startTime'] !== null) {
                 $parts[] = ['name' => 'time', 'valueTime' => $row['pc_startTime']];
             }
-            if ($row['pc_endTime'] !== null) {
-                // The host reads an end of 24:00 or later as a time on the next day.
-                $end = new \DateTimeImmutable($row['pc_eventDate'] . ' ' . $row['pc_endTime'], new \DateTimeZone('UTC'));
-                $parts[] = ['name' => 'end', 'valueString' => $end->format('Y-m-d H:i:s')];
+            if ($row['end_at'] !== null) {
+                $parts[] = ['name' => 'end', 'valueString' => $row['end_at']];
             }
             if (isset($providers[(int) $row['pc_aid']])) {
                 $parts[] = ['name' => 'provider', 'valueString' => $uuid($providers[(int) $row['pc_aid']])];

@@ -38,6 +38,8 @@ for number in range(1, 121):
 multiple = pdf_text("export-multiple.pdf")
 assert "ALPHA EDITED CLINICAL" in multiple and "SECOND CLINICAL ENTRY" in multiple
 assert "Signature recorded: " in pdf_text("export-signed.pdf")
+assert "Synthetic blank note amendment" in pdf_text("export-signed-blank.pdf"), "a signed blank note prints its amendment"
+assert "Synthetic encounter sign-off" in pdf_text("export-encounter-signed.pdf"), "an encounter amendment prints"
 first, second = pdf_text("export-hpi-first.pdf"), pdf_text("export-hpi-second.pdf")
 assert "FIRST VISIT HPI" in first and "SECOND VISIT HPI" not in first, "a note shows its own history value"
 assert "SECOND VISIT HPI" in second and "ALPHA SECOND VISIT" in second
