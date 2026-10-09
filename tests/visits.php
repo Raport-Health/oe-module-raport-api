@@ -4,9 +4,6 @@ declare(strict_types=1);
 
 // SPDX-License-Identifier: MIT
 // Included by auth.php while its disposable OAuth client is enabled.
-if (PHP_SAPI !== 'cli' || !isset($token) || $GLOBALS['site_addr_oath'] !== 'https://localhost:19443') {
-    exit(1);
-}
 
 use OpenEMR\Common\Database\QueryUtils;
 use OpenEMR\Common\Uuid\UuidRegistry;
@@ -120,6 +117,9 @@ try {
     $facility = sqlQuery("SELECT f.id, m.uuid FROM facility f JOIN uuid_mapping m ON m.target_uuid = f.uuid AND m.resource = 'Location' ORDER BY f.id LIMIT 1");
     sqlStatement("UPDATE openemr_postcalendar_events SET pc_apptstatus = '@', pc_endTime = '24:30:00', pc_facility = ? WHERE pc_eid = 920001", [$facility['id']]);
     sqlStatement("UPDATE openemr_postcalendar_events SET pc_apptstatus = 'unknown' WHERE pc_eid = 920002");
+    $unknown = visitsCall($moduleToken, ['patient' => $p1], 409, 'V21 a status OpenEMR does not define');
+    check($unknown['issue'][0]['diagnostics'] === "Appointment $b has an unsupported status.", 'V21 diagnostics name only the appointment UUID');
+    sqlStatement("UPDATE openemr_postcalendar_events SET pc_apptstatus = '^' WHERE pc_eid = 920002");
     $native = visitRows(visitsCall($moduleToken, ['patient' => $p1], 200, 'V21 native appointment fields'))['appointment'];
     check([$native[$a]['status'], $native[$a]['end'], $native[$a]['location'], $native[$b]['status']] === ['arrived', '2031-01-07 00:30:00', UuidRegistry::uuidToString($facility['uuid']), 'pending'],
         'V21 status, an end past midnight and the facility Location UUID follow native FHIR Appointment');

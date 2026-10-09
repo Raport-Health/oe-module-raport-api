@@ -221,7 +221,7 @@ final class EncounterDocument
             // Source H fields are stored per patient: every save adds a history_data row, and natively every note shows
             // the newest. A note's own value is the newest row saved before the patient's next note that writes history.
             // Which layouts write history is LBF/new.php's own rule: read-only (0) and hidden (H) fields are not saved.
-            $history = sqlQuery("SELECT * FROM history_data WHERE pid = ? AND date < COALESCE((SELECT MIN(date) FROM forms WHERE pid = ? AND id > ? AND formdir IN (SELECT form_id FROM layout_options WHERE source = 'H' AND uor > 0 AND field_id != '' AND edit_options != 'H' AND edit_options NOT LIKE '%0%')), '9999-12-31') ORDER BY date DESC, id DESC LIMIT 1", [$encounter['pid'], $encounter['pid'], $form['id']]) ?: [];
+            $history = sqlQuery("SELECT * FROM history_data WHERE pid = ? AND date < COALESCE((SELECT MIN(date) FROM forms WHERE pid = ? AND id > ? AND formdir IN (SELECT form_id FROM layout_options WHERE source = 'H' AND uor > 0 AND field_id != '' AND edit_options != 'H' AND edit_options NOT LIKE '%0%')), '9999-12-31') ORDER BY date DESC, id DESC LIMIT 1", [$encounter['pid'], $encounter['pid'], $form['id']]);
             $groupIds = array_column($layout, 'grp_group_id');
             $values = [];
             $stored = $data !== [];
@@ -384,8 +384,8 @@ final class EncounterDocument
 
     private function signatures(string $table, $id): array
     {
-        // LEFT JOIN preserves recorded signatures even if their original user is no longer present.
-        return QueryUtils::fetchRecords('SELECT s.id, s.uid, s.datetime, s.is_lock, s.amendment, s.hash, s.signature_hash, u.fname, u.lname FROM esign_signatures s LEFT JOIN users u ON u.id = s.uid WHERE s.`table` = ? AND s.tid = ? ORDER BY s.datetime, s.id', [$table, $id]);
+        // OpenEMR deactivates users and never deletes them, so every signer has a row.
+        return QueryUtils::fetchRecords('SELECT s.id, s.uid, s.datetime, s.is_lock, s.amendment, s.hash, s.signature_hash, u.fname, u.lname FROM esign_signatures s JOIN users u ON u.id = s.uid WHERE s.`table` = ? AND s.tid = ? ORDER BY s.datetime, s.id', [$table, $id]);
     }
 
     private function signatureParts(array $signature): array
@@ -400,7 +400,7 @@ final class EncounterDocument
         if ($signature['amendment'] !== null && $signature['amendment'] !== '') {
             $parts[] = ['name' => 'amendment', 'valueString' => $signature['amendment']];
         }
-        $name = trim(($signature['fname'] ?? '') . ' ' . ($signature['lname'] ?? ''));
+        $name = trim($signature['fname'] . ' ' . $signature['lname']);
         if ($name !== '') {
             $parts[] = ['name' => 'signerDisplay', 'valueString' => $name];
         }
@@ -411,8 +411,7 @@ final class EncounterDocument
     {
         $encounter = $snapshot['encounter'];
         $escape = fn($text) => htmlspecialchars((string) $text, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
-        // The user id stands in for a signer who no longer exists.
-        $signer = fn(array $signature) => $escape(trim(($signature['fname'] ?? '') . ' ' . ($signature['lname'] ?? '')) ?: 'user ' . $signature['uid']);
+        $signer = fn(array $signature) => $escape(trim($signature['fname'] . ' ' . $signature['lname']));
         $html = '<html><head><meta charset="UTF-8"><style>' . self::STYLE . '</style></head><body><h1>Encounter notes</h1><p>' . $escape($encounter['fname'] . ' ' . $encounter['lname']) . ' | DOB: ' . $escape($encounter['DOB']) . '<br>Encounter: ' . $escape($encounter['encounter']) . ' | Date (clinic local): ' . $escape($encounter['date']) . '</p><p class="provenance">Current rendering. Signature records are evidence of recorded actions, not cryptographic verification of this PDF or a historical snapshot.</p>';
         foreach ($snapshot['encounterSignatures'] as $signature) {
             $html .= '<p class="provenance">Encounter signature recorded: ' . $signer($signature) . ' at ' . $escape($signature['datetime']) . '</p>';

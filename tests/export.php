@@ -4,9 +4,6 @@ declare(strict_types=1);
 
 // SPDX-License-Identifier: MIT
 // Included by auth.php while its disposable OAuth client is enabled.
-if (PHP_SAPI !== 'cli' || !isset($token) || $GLOBALS['site_addr_oath'] !== 'https://localhost:19443') {
-    exit(1);
-}
 
 use OpenEMR\Common\Acl\AclMain;
 use OpenEMR\Common\Uuid\UuidRegistry;

@@ -43,7 +43,7 @@
       { "name": "time", "use": "out", "min": 0, "max": "1", "type": "time" },
       { "name": "end", "use": "out", "min": 0, "max": "1", "type": "string", "documentation": "YYYY-MM-DD HH:MM:SS clinic-local wall clock: the date plus the stored end time, on the next day for an end of 24:00 or later. Absent without a stored end time." },
       { "name": "provider", "use": "out", "min": 0, "max": "1", "type": "string", "documentation": "Provider UUID." },
-      { "name": "status", "use": "out", "min": 1, "max": "1", "type": "code", "documentation": "The native FHIR Appointment status of pc_apptstatus: proposed, pending, booked, arrived, checked-in, fulfilled, cancelled, noshow or waitlist." },
+      { "name": "status", "use": "out", "min": 1, "max": "1", "type": "code", "documentation": "The native FHIR Appointment status of a default pc_apptstatus: proposed, pending, booked, arrived, checked-in, fulfilled, cancelled, noshow or waitlist. Any other status fails with 409." },
       { "name": "typeCode", "use": "out", "min": 0, "max": "1", "type": "string", "documentation": "Appointment category constant id, as native FHIR Appointment codes appointmentType." },
       { "name": "typeDisplay", "use": "out", "min": 0, "max": "1", "type": "string", "documentation": "Appointment category name." },
       { "name": "location", "use": "out", "min": 0, "max": "1", "type": "string", "documentation": "Location UUID of the appointment facility, as native FHIR Appointment names it. Absent when the facility has none." },
