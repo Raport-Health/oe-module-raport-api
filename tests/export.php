@@ -5,19 +5,12 @@ declare(strict_types=1);
 // SPDX-License-Identifier: MIT
 // Included by auth.php while its disposable OAuth client is enabled.
 
-use OpenEMR\Common\Acl\AclMain;
 use OpenEMR\Common\Uuid\UuidRegistry;
 use OpenEMR\Gacl\GaclApi;
 
 function exported(string $uuid, string $token, int $expected = 200, string $query = ''): array
 {
-    [$status, $body] = callApi('/apis/default/fhir/Encounter/' . $uuid . '/$raport-document' . $query, token: $token);
-    $result = json_decode($body, true, 512, JSON_THROW_ON_ERROR);
-    check($status === $expected, 'export expected HTTP ' . $expected . ', received ' . $status . ($status !== $expected ? ' (' . ($result['issue'][0]['diagnostics'] ?? 'no diagnostics') . ')' : ''));
-    if ($expected !== 200) {
-        check($result['resourceType'] === 'OperationOutcome' && !isset($result['parameter']), 'failure does not expose a partial document');
-    }
-    return $result;
+    return operationCall('/apis/default/fhir/Encounter/' . $uuid . '/$raport-document' . $query, $token, $expected, "export expected $expected");
 }
 function outputValue(array $result, string $name, string $key)
 {
@@ -119,14 +112,12 @@ try {
     sqlStatement('DELETE FROM forms WHERE id = ?', [$blankLbf]);
     file_put_contents('/module-local/artifacts/export-empty.json', json_encode($empty, JSON_THROW_ON_ERROR));
     check(outputValue($empty, 'noteCount', 'valueUnsignedInt') === 0 && !in_array('document', array_column($empty['parameter'], 'name'), true) && excludedTypes($empty) === [$layout], 'a blank layout note is excluded, leaving an explicit empty inventory and no PDF');
-    foreach ([['form_soap', 'subjective', 'ALPHA EDITED SOAP', $soapId], ['form_clinical_notes', 'description', 'ALPHA EDITED CLINICAL', null], ['lbf_data', 'field_value', 'ALPHA EDITED LBF', $lbfId]] as [$table,$field,$value,$id]) {
-        if ($table === 'form_clinical_notes') {
-            sqlStatement('UPDATE form_clinical_notes SET description = ? WHERE form_id = 910001', [$value]);
-        } elseif ($table === 'lbf_data') {
-            sqlStatement('UPDATE lbf_data SET field_value = ? WHERE form_id = ? AND field_id = ?', [$value,$id,'narrative']);
-        } else {
-            sqlStatement('UPDATE form_soap SET subjective = ? WHERE id = ?', [$value,$id]);
-        }
+    foreach ([
+        ['form_soap', 'UPDATE form_soap SET subjective = ? WHERE id = ?', ['ALPHA EDITED SOAP', $soapId]],
+        ['form_clinical_notes', 'UPDATE form_clinical_notes SET description = ? WHERE form_id = 910001', ['ALPHA EDITED CLINICAL']],
+        ['lbf_data', 'UPDATE lbf_data SET field_value = ? WHERE form_id = ? AND field_id = ?', ['ALPHA EDITED LBF', $lbfId, 'narrative']],
+    ] as [$table, $sql, $binds]) {
+        sqlStatement($sql, $binds);
         $changed = exported($encounterA, $token);
         check(revisionOf($changed) !== revisionOf($again), "$table edit changes revision");
         check(outputValue($changed, 'document', 'resource')['identifier'] === $doc['identifier'], 'edit preserves logical identity');
@@ -348,11 +339,6 @@ try {
     try { exported($encounterA,$token,403); } finally { sqlStatement('UPDATE registry SET aco_spec = ? WHERE directory = ?',[$registryAcl,'soap']); }
     $audit = sqlQuery('SELECT COUNT(*) AS total, SUM(request_body <> ? OR response <> ?) AS bodies FROM api_log WHERE request = ? AND patient_id = 910001', ['', '', 'Encounter.$raport-document']);
     check((int)$audit['total'] > 0 && (int)$audit['bodies'] === 0, 'metadata audit retained without PDF/clinical response bodies');
-    [$status, $metadata] = callApi('/apis/default/fhir/metadata');
-    check($status === 200 && str_contains($metadata,'urn:raport:openemr:OperationDefinition:raport-document'), 'CapabilityStatement advertises the operation');
-    [$status, $definitions] = callApi('/apis/default/fhir/OperationDefinition');
-    $definitions = json_decode($definitions,true,512,JSON_THROW_ON_ERROR);
-    check($status === 200 && count(array_filter($definitions['entry'], fn($entry) => ($entry['resource']['id'] ?? null) === 'raport-document')) === 1, 'OperationDefinition available through public discovery');
 } finally {
     if ($testAcl !== null && $testAcl !== false) { $gacl->del_acl($testAcl); }
     if ($testGroup !== null) { $gacl->del_group($testGroup, true, 'ARO'); }

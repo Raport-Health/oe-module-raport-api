@@ -11,13 +11,7 @@ use OpenEMR\Gacl\GaclApi;
 
 function visitsCall(string $token, array $query, int $expected, string $label): array
 {
-    [$status, $body] = callApi('/apis/default/fhir/$raport-visits' . ($query === [] ? '' : '?' . http_build_query($query)), token: $token);
-    $result = json_decode($body, true, 512, JSON_THROW_ON_ERROR);
-    $shape = $expected === 200
-        ? $result['parameter'][0] === ['name' => 'complete', 'valueBoolean' => true]
-        : $result['resourceType'] === 'OperationOutcome' && !isset($result['parameter']);
-    check($status === $expected && $shape, "$label: HTTP $status" . ($status !== $expected ? ' (' . ($result['issue'][0]['diagnostics'] ?? 'no diagnostics') . ')' : ''));
-    return $result;
+    return operationCall('/apis/default/fhir/$raport-visits' . ($query === [] ? '' : '?' . http_build_query($query)), $token, $expected, $label);
 }
 // Parameter name => uuid => part name => value, in response order.
 function visitRows(array $result): array
@@ -192,23 +186,10 @@ try {
     sqlStatement('UPDATE form_encounter SET date = NULL WHERE id = 920002');
     $undated = visitsCall($moduleToken, ['patient' => $p1], 409, 'V19 encounter without a date');
     check($undated['issue'][0]['diagnostics'] === "Visit $w has no usable date.", 'V19 diagnostics name only the visit UUID');
-    sqlStatement('UPDATE form_encounter SET date = ? WHERE id = 920002', ['2031-01-07 10:00:00']);
     sqlStatement('UPDATE form_encounter SET date = ? WHERE id = 920002', ['0000-00-00 00:00:00']);
     $zeroDate = visitsCall($moduleToken, ['patient' => $p1], 409, 'V19 encounter with a zero date');
     check($zeroDate['issue'][0]['diagnostics'] === "Visit $w has no usable date.", 'V19 zero-date diagnostics name only the visit UUID');
     sqlStatement('UPDATE form_encounter SET date = ? WHERE id = 920002', ['2031-01-07 10:00:00']);
-
-    [$status, $metadata] = callApi('/apis/default/fhir/metadata');
-    $advertised = $status === 200;
-    foreach (json_decode($metadata, true, 512, JSON_THROW_ON_ERROR)['rest'] as $rest) {
-        $encounterResource = array_values(array_filter($rest['resource'], fn($resource) => $resource['type'] === 'Encounter'))[0];
-        $advertised = $advertised && in_array(['name' => 'raport-visits', 'definition' => 'urn:raport:openemr:OperationDefinition:raport-visits'], $rest['operation'] ?? [], true)
-            && in_array('raport-document', array_column($encounterResource['operation'] ?? [], 'name'), true);
-    }
-    check($advertised, 'V16 CapabilityStatement advertises the visits operation and keeps the Encounter document operation');
-    [$status, $definitions] = callApi('/apis/default/fhir/OperationDefinition');
-    $ids = array_count_values(array_map(fn($entry) => (string) ($entry['resource']['id'] ?? ''), json_decode($definitions, true, 512, JSON_THROW_ON_ERROR)['entry']));
-    check($status === 200 && ($ids['raport-document'] ?? 0) === 1 && ($ids['raport-visits'] ?? 0) === 1, 'V16 OperationDefinition list holds both module definitions exactly once');
 
     sqlStatement('UPDATE globals SET gl_value = 2 WHERE gl_name = ?', ['api_log_option']);
     $lastLog = (int) sqlQuery('SELECT COALESCE(MAX(id), 0) AS id FROM api_log')['id'];

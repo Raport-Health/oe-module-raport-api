@@ -23,7 +23,7 @@ final class Labs
     public function read(string $patientUuid, HttpRestRequest $request): array
     {
         $user = $request->getSession()->get('authUser');
-        $this->allow('patients', 'med', $user);
+        $this->allow('patients|med', $user);
         // Native backfill commits, so it runs before the read transaction, as in the other operations.
         UuidRegistry::createMissingUuidsForTables(self::TABLES);
         QueryUtils::sqlStatementThrowException('SET TRANSACTION ISOLATION LEVEL REPEATABLE READ');
@@ -33,7 +33,7 @@ final class Labs
             $pid = (int) $patient['pid'];
             $request->attributes->set('raportPatientId', $pid);
             if ($patient['squad']) {
-                $this->allow('squads', $patient['squad'], $user);
+                $this->allow('squads|' . $patient['squad'], $user);
             }
             return ['resourceType' => 'Parameters', 'parameter' => [
                 ['name' => 'complete', 'valueBoolean' => true],
@@ -49,7 +49,7 @@ final class Labs
      */
     public function encounterOrder(int $orderId, int $pid, int $encounter, string $user): ?array
     {
-        $this->allow('patients', 'med', $user);
+        $this->allow('patients|med', $user);
         UuidRegistry::createMissingUuidsForTables(self::TABLES);
         $order = QueryUtils::fetchRecords('SELECT patient_id, encounter_id, activity FROM procedure_order WHERE procedure_order_id = ?', [$orderId])[0] ?? null;
         if ($order === null || (int) $order['patient_id'] !== $pid || (int) $order['encounter_id'] !== $encounter) {
@@ -85,11 +85,9 @@ final class Labs
                     throw new OperationProblem(409, 'conflict', "Order $uuid has an unresolvable encounter link.");
                 }
                 if ($row['sensitivity']) {
-                    $this->allow('sensitivities', $row['sensitivity'], $user);
+                    $this->allow('sensitivities|' . $row['sensitivity'], $user);
                 }
-                if (!AclMain::aclCheckAcoSpec(AclMain::fetchPostCalendarCategoryACO($row['pc_catid']), $user)) {
-                    throw new OperationProblem(403, 'forbidden', 'The system principal cannot read this order encounter.');
-                }
+                $this->allow(AclMain::fetchPostCalendarCategoryACO($row['pc_catid']), $user);
                 $parts[] = ['name' => 'encounter', 'valueString' => $this->uuid($row['encounter_uuid'])];
             }
             $entries[] = ['name' => 'order', 'part' => $parts];
@@ -98,9 +96,6 @@ final class Labs
         foreach ($codes as $row) {
             $order = $orderUuids[$row['procedure_order_id']];
             $sequence = (int) $row['procedure_order_seq'];
-            if ($sequence < 1) {
-                throw new OperationProblem(409, 'conflict', "Order $order has an invalid test sequence.");
-            }
             $tests[$order . ':' . $sequence] = true;
             $entries[] = ['name' => 'test', 'part' => [['name' => 'order', 'valueString' => $order], ['name' => 'sequence', 'valueInteger' => $sequence], ...$this->strings($row, self::TEST)]];
         }
@@ -123,7 +118,7 @@ final class Labs
             $uuid = $this->uuid($row['uuid']);
             $parts = [['name' => 'uuid', 'valueString' => $uuid], ['name' => 'report', 'valueString' => $reportUuids[$row['procedure_report_id']]], ...$this->strings($row, self::RESULT)];
             if ((int) $row['document_id'] !== 0) {
-                $this->allow('patients', 'docs', $user);
+                $this->allow('patients|docs', $user);
                 if ((int) $row['document_pid'] !== $pid || strlen((string) $row['document_uuid']) !== 16) {
                     throw new OperationProblem(409, 'conflict', "Result $uuid has an unresolvable document link.");
                 }
@@ -161,9 +156,10 @@ final class Labs
         }
     }
 
-    private function allow(string $section, string $value, string $user): void
+    /** A host ACO spec, "section|value"; an empty spec allows. */
+    private function allow(?string $spec, string $user): void
     {
-        if (!AclMain::aclCheckCore($section, $value, $user)) {
+        if (!AclMain::aclCheckAcoSpec($spec, $user)) {
             throw new OperationProblem(403, 'forbidden', 'The system principal cannot read these lab records.');
         }
     }

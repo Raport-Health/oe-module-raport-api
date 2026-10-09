@@ -132,7 +132,8 @@ final class EncounterDocument
 
     private function snapshot(string $uuid, HttpRestRequest $request): array
     {
-        $this->requireAccess(AclMain::aclCheckCore('patients', 'demo') && AclMain::aclCheckCore('encounters', 'notes'));
+        $this->allow('patients|demo');
+        $this->allow('encounters|notes');
         $encounter = sqlQuery('SELECT e.encounter, e.pid, e.date, e.reason, e.sensitivity, e.pc_catid, p.uuid AS patient_uuid, p.fname, p.lname, p.DOB, p.squad FROM form_encounter e JOIN patient_data p ON p.pid = e.pid WHERE e.uuid = ?', [UuidRegistry::uuidToBytes($uuid)]);
         if (!$encounter) {
             throw new OperationProblem(404, 'not-found', 'Encounter not found.');
@@ -141,12 +142,12 @@ final class EncounterDocument
             throw new OperationProblem(409, 'conflict', 'Encounter identifier has ambiguous ownership.');
         }
         if ($encounter['sensitivity']) {
-            $this->requireAccess(AclMain::aclCheckCore('sensitivities', $encounter['sensitivity']));
+            $this->allow('sensitivities|' . $encounter['sensitivity']);
         }
         if ($encounter['squad']) {
-            $this->requireAccess(AclMain::aclCheckCore('squads', $encounter['squad']));
+            $this->allow('squads|' . $encounter['squad']);
         }
-        $this->requireAccess(AclMain::aclCheckAcoSpec(AclMain::fetchPostCalendarCategoryACO($encounter['pc_catid'])));
+        $this->allow(AclMain::fetchPostCalendarCategoryACO($encounter['pc_catid']));
         if (strlen((string) $encounter['patient_uuid']) !== 16) {
             throw new OperationProblem(409, 'conflict', 'The encounter patient has no usable UUID.');
         }
@@ -211,9 +212,10 @@ final class EncounterDocument
             }
             // The only ACL check for these notes: display_layout_rows, which prints them, checks none.
             foreach ($layout as $group) {
-                $this->requireAccess(AclMain::aclCheckAcoSpec($group['grp_aco_spec']));
+                $this->allow($group['grp_aco_spec']);
             }
-            $fields = QueryUtils::fetchRecords('SELECT * FROM layout_options WHERE form_id = ? ORDER BY group_id, seq, field_id', [$form['formdir']]);
+            // uor 0 hides a field, and the native renderer skips it.
+            $fields = QueryUtils::fetchRecords('SELECT * FROM layout_options WHERE form_id = ? AND uor > 0 ORDER BY group_id, seq, field_id', [$form['formdir']]);
             $data = QueryUtils::fetchRecords('SELECT field_id, field_value FROM lbf_data WHERE form_id = ? ORDER BY field_id', [$form['form_id']]);
             // Supported field types: text (2), text area (3), provider (10), static text (31), template text (34).
             // Others read live chart data or file-scope globals this method does not have, and need their own tests first.
@@ -226,9 +228,6 @@ final class EncounterDocument
             $values = [];
             $stored = $data !== [];
             foreach ($fields as $field) {
-                if ((int) $field['uor'] === 0) {
-                    continue;
-                }
                 if (!in_array((int) $field['data_type'], [2, 3, 10, 31, 34], true)
                     || !in_array($field['source'], ['F', 'D', 'H'], true)
                     || str_contains($field['edit_options'], 'H')
@@ -263,7 +262,7 @@ final class EncounterDocument
         if (!$registry) {
             throw new OperationProblem(422, 'not-supported', 'A note form is not registered.');
         }
-        $this->requireAccess(AclMain::aclCheckAcoSpec($registry['aco_spec']));
+        $this->allow($registry['aco_spec']);
         if ($form['formdir'] === 'procedure_order') {
             $user = SessionWrapperFactory::getInstance()->getWrapper()->get('authUser');
             return (new Labs())->encounterOrder((int) $form['form_id'], (int) $encounter['pid'], (int) $encounter['encounter'], $user);
@@ -368,7 +367,6 @@ final class EncounterDocument
 
     private function orderFields(array $parts): string
     {
-        $escape = fn(string $text): string => htmlspecialchars($text, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
         $html = '<p>';
         foreach ($parts as $part) {
             // Identity links and encoding details remain in the API/source revision, outside clinical prose.
@@ -377,7 +375,7 @@ final class EncounterDocument
             }
             $label = ucfirst(preg_replace('/([a-z])([A-Z])/', '$1 $2', $part['name']));
             $value = $part['valueString'] ?? (string) $part['valueInteger'];
-            $html .= '<b>' . $escape($label) . ':</b> ' . $escape($value) . '<br>';
+            $html .= '<b>' . $this->escape($label) . ':</b> ' . $this->escape($value) . '<br>';
         }
         return $html . '</p>';
     }
@@ -410,7 +408,7 @@ final class EncounterDocument
     private function documentHtml(array $snapshot): string
     {
         $encounter = $snapshot['encounter'];
-        $escape = fn($text) => htmlspecialchars((string) $text, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
+        $escape = $this->escape(...);
         $signer = fn(array $signature) => $escape(trim($signature['fname'] . ' ' . $signature['lname']));
         $html = '<html><head><meta charset="UTF-8"><style>' . self::STYLE . '</style></head><body><h1>Encounter notes</h1><p>' . $escape($encounter['fname'] . ' ' . $encounter['lname']) . ' | DOB: ' . $escape($encounter['DOB']) . '<br>Encounter: ' . $escape($encounter['encounter']) . ' | Date (clinic local): ' . $escape($encounter['date']) . '</p><p class="provenance">Current rendering. Signature records are evidence of recorded actions, not cryptographic verification of this PDF or a historical snapshot.</p>';
         foreach ($snapshot['encounterSignatures'] as $signature) {
@@ -431,9 +429,15 @@ final class EncounterDocument
         return hash('sha256', json_encode($data, JSON_THROW_ON_ERROR | JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES));
     }
 
-    private function requireAccess(bool $allowed): void
+    private function escape(string|int|null $text): string
     {
-        if (!$allowed) {
+        return htmlspecialchars((string) $text, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
+    }
+
+    /** A host ACO spec, "section|value"; an empty spec allows. */
+    private function allow(?string $spec): void
+    {
+        if (!AclMain::aclCheckAcoSpec($spec)) {
             throw new OperationProblem(403, 'forbidden', 'The system principal cannot read all notes for this encounter.');
         }
     }

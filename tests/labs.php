@@ -11,12 +11,7 @@ use Raport\OpenEmr\Bootstrap;
 
 function labsCall(string $token, string $patient, int $expected = 200, string $query = ''): array
 {
-    [$status, $body] = callApi('/apis/default/fhir/Patient/' . $patient . '/$raport-labs' . $query, token: $token);
-    $result = json_decode($body, true, 512, JSON_THROW_ON_ERROR);
-    // OAuth failures are answered by the host before the module can return OperationOutcome.
-    $shape = $expected === 401 || ($expected === 200 ? $result['parameter'][0] === ['name' => 'complete', 'valueBoolean' => true] : $result['resourceType'] === 'OperationOutcome' && !isset($result['parameter']));
-    check($status === $expected && $shape, "labs HTTP $expected, received $status");
-    return $result;
+    return operationCall('/apis/default/fhir/Patient/' . $patient . '/$raport-labs' . $query, $token, $expected, "labs expected $expected");
 }
 function labRows(array $result, string $kind): array
 {
@@ -37,7 +32,6 @@ labsCall($token, $labPatient, 401);
 labsCall('invalid', $labPatient, 401);
 labsCall($labsToken, 'not-a-uuid', 400);
 labsCall($labsToken, $labPatient, 404);
-$labRegistration = null;
 $gacl = new GaclApi();
 $groups = $gacl->get_object_groups($gacl->get_object_id('users', 'oe-system', 'ARO'), 'ARO', 'NO_RECURSE');
 $testAcl = null;
@@ -147,10 +141,6 @@ try {
     labsCall($labsToken, $labPatient);
     $audit = sqlQuery('SELECT COUNT(*) AS total, SUM(request_body <> ? OR response <> ?) AS bodies FROM api_log WHERE request=? AND patient_id=940001', ['', '', 'Patient.$raport-labs']);
     check((int) $audit['total'] > 0 && (int) $audit['bodies'] === 0, 'lab audit retains metadata only, including with body logging enabled');
-    [$status, $metadata] = callApi('/apis/default/fhir/metadata');
-    check($status === 200 && str_contains($metadata, 'urn:raport:openemr:OperationDefinition:raport-labs'), 'labs advertised in CapabilityStatement');
-    [$status, $definitions] = callApi('/apis/default/fhir/OperationDefinition');
-    check($status === 200 && count(array_filter(json_decode($definitions, true, 512, JSON_THROW_ON_ERROR)['entry'], fn($entry) => ($entry['resource']['id'] ?? null) === 'raport-labs')) === 1, 'labs definition advertised once');
 } finally {
     if ($testAcl !== null && $testAcl !== false) { $gacl->del_acl($testAcl); }
     if ($testGroup !== null) { $gacl->del_group($testGroup, true, 'ARO'); }

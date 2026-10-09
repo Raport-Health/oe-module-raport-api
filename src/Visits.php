@@ -13,14 +13,15 @@ use OpenEMR\Common\Uuid\UuidRegistry;
 
 final class Visits
 {
-    // calendar_owner is the host calendar-user rule, which ignores active; NULL columns count as false.
-    private const PROVIDERS = "SELECT id, uuid, username, fname, lname, npi, active, COALESCE(username != '' AND authorized = 1 AND calendar = 1, 0) AS calendar_owner FROM users WHERE ";
+    // calendar_owner is the host calendar-user rule, which ignores active. It is NULL, so false, when a column is NULL.
+    private const PROVIDERS = "SELECT id, uuid, username, fname, lname, npi, active, (username != '' AND authorized = 1 AND calendar = 1) AS calendar_owner FROM users WHERE ";
     // Category and facility Location are joined as the host AppointmentService::search joins them for FHIR Appointment.
     private const APPOINTMENTS = "SELECT e.pc_eid, e.uuid, e.pc_pid, e.pc_aid, e.pc_eventDate, e.pc_startTime, e.pc_endTime, e.pc_apptstatus, e.pc_recurrtype, p.pid, p.uuid AS patient_uuid, p.squad, c.pc_constant_id, c.pc_catname, m.uuid AS location_uuid FROM openemr_postcalendar_events e JOIN patient_data p ON p.pid = e.pc_pid LEFT JOIN openemr_postcalendar_categories c ON c.pc_catid = e.pc_catid LEFT JOIN facility f ON f.id = e.pc_facility LEFT JOIN uuid_mapping m ON m.target_uuid = f.uuid AND m.resource = 'Location' WHERE ";
     // The host FHIR Appointment status of each default pc_apptstatus (FhirAppointmentService::parseOpenEMRRecord). The host
     // reads a clinic's own status as pending; here it fails, since nobody has decided what it means.
     private const STATUS = ['-' => 'proposed', '#' => 'pending', '^' => 'pending', '>' => 'fulfilled', '$' => 'fulfilled', 'AVM' => 'booked', 'SMS' => 'booked', 'EMAIL' => 'booked', '*' => 'booked', '%' => 'cancelled', '!' => 'cancelled', 'x' => 'cancelled', '?' => 'noshow', '~' => 'arrived', '@' => 'arrived', '<' => 'checked-in', '+' => 'checked-in', 'CALL' => 'waitlist'];
-    private const ENCOUNTERS = 'SELECT fe.id, fe.uuid, fe.encounter, fe.pid, fe.date, fe.reason, fe.provider_id, fe.sensitivity, fe.pc_catid, p.uuid AS patient_uuid, p.squad FROM form_encounter fe JOIN patient_data p ON p.pid = fe.pid WHERE ';
+    // The category's ACO spec as AclMain::fetchPostCalendarCategoryACO reads it, joined to skip a query per row.
+    private const ENCOUNTERS = 'SELECT fe.id, fe.uuid, fe.encounter, fe.pid, fe.date, fe.reason, fe.provider_id, fe.sensitivity, c.aco_spec, p.uuid AS patient_uuid, p.squad FROM form_encounter fe JOIN patient_data p ON p.pid = fe.pid LEFT JOIN openemr_postcalendar_categories c ON c.pc_catid = fe.pc_catid WHERE ';
     // The Flow Board's current tracker row: same patient, date, start time and appointment id. Encounter 0 is blank, and a recurring appointment is never linked.
     private const LINKS = 'SELECT e.pc_eid, t.encounter FROM openemr_postcalendar_events e JOIN patient_tracker t ON t.pid = e.pc_pid AND t.apptdate = e.pc_eventDate AND t.appttime = e.pc_startTime AND t.eid = e.pc_eid WHERE t.encounter <> 0 AND e.pc_recurrtype = 0 AND e.pc_eid';
     private const LINKERS = 'SELECT DISTINCT e.pc_eid FROM form_encounter fe JOIN patient_tracker t ON t.encounter = fe.encounter AND t.pid = fe.pid JOIN openemr_postcalendar_events e ON t.pid = e.pc_pid AND t.apptdate = e.pc_eventDate AND t.appttime = e.pc_startTime AND t.eid = e.pc_eid WHERE t.encounter <> 0 AND e.pc_recurrtype = 0 AND fe.id';
@@ -32,10 +33,10 @@ final class Visits
     {
         $scope = $this->scope($request->query->all());
         $this->user = $request->getSession()->get('authUser');
-        $this->allow('admin', 'users');
+        $this->allow('admin|users');
         if ($scope !== null) {
-            $this->allow('patients', 'appt');
-            $this->allow('encounters', 'auth_a');
+            $this->allow('patients|appt');
+            $this->allow('encounters|auth_a');
         }
         // The backfill commits its own transactions, so it runs before the snapshot.
         UuidRegistry::createMissingUuidsForTables(['users', 'patient_data', 'form_encounter', 'openemr_postcalendar_events']);
@@ -101,27 +102,19 @@ final class Visits
         $links += $moreLinks;
         $appointments += $more;
 
-        $categories = [];
         foreach ($encounters as $row) {
             if ($row['sensitivity']) {
-                $this->allow('sensitivities', $row['sensitivity']);
+                $this->allow('sensitivities|' . $row['sensitivity']);
             }
-            $categories[$row['pc_catid']] ??= AclMain::aclCheckAcoSpec(AclMain::fetchPostCalendarCategoryACO($row['pc_catid']), $this->user);
-            $this->grant($categories[$row['pc_catid']]);
+            $this->allow($row['aco_spec']);
         }
         foreach ([...$appointments, ...$encounters] as $row) {
             if ($row['squad']) {
-                $this->allow('squads', $row['squad']);
+                $this->allow('squads|' . $row['squad']);
             }
         }
 
-        $ids = [];
-        foreach ($appointments as $row) {
-            $ids[] = (int) $row['pc_aid'];
-        }
-        foreach ($encounters as $row) {
-            $ids[] = (int) $row['provider_id'];
-        }
+        $ids = array_map('intval', [...array_column($appointments, 'pc_aid'), ...array_column($encounters, 'provider_id')]);
         $providers = $this->records($this->in(self::PROVIDERS . 'id', array_unique(array_filter($ids, fn(int $id): bool => $id > 0))), 'id');
         return $this->parameters($providers, $encounters, $appointments, $links);
     }
@@ -154,7 +147,6 @@ final class Visits
         return [$links, $linked];
     }
 
-    // An empty id set is skipped, not sent.
     private function in(string $sql, array $ids): array
     {
         return $ids === [] ? [] : QueryUtils::fetchRecords($sql . ' IN (' . implode(',', array_fill(0, count($ids), '?')) . ')', array_values($ids));
@@ -176,15 +168,10 @@ final class Visits
         return $records;
     }
 
-    private function allow(string $section, string $value): void
+    /** A host ACO spec, "section|value"; an empty spec allows. Cached: a window's rows share a few specs. */
+    private function allow(?string $spec): void
     {
-        $this->allowed[$section . '|' . $value] ??= AclMain::aclCheckCore($section, $value, $this->user);
-        $this->grant($this->allowed[$section . '|' . $value]);
-    }
-
-    private function grant(bool $allowed): void
-    {
-        if (!$allowed) {
+        if (!($this->allowed[(string) $spec] ??= AclMain::aclCheckAcoSpec($spec, $this->user))) {
             throw new OperationProblem(403, 'forbidden', 'The system principal cannot read every requested visit.');
         }
     }
