@@ -191,7 +191,7 @@ final class EncounterDocument
             }
             $signable = (new \ESign\Form_Factory($form['id'], $form['formdir'], $encounter['encounter']))->createSignable();
             $notes[] = ['form' => $form, 'source' => $source,
-                'signatures' => $this->signatures('forms', $form['id']), 'locked' => (bool) $signable->isLocked(),
+                'signatures' => $this->signatures('forms', $form['id']), 'locked' => $signable->isLocked(),
                 'html' => $html];
         }
         // Bump 'format' whenever documentHtml changes: callers keep their PDF while the revision matches.
@@ -206,8 +206,8 @@ final class EncounterDocument
             // OpenEMR reads TIMESTAMP columns at the current UTC offset, so this layout-editor stamp shifts with daylight
             // saving. Nothing prints it.
             $layout = array_map(fn($row) => array_diff_key($row, ['grp_last_update' => true]), QueryUtils::fetchRecords('SELECT * FROM layout_group_properties WHERE grp_form_id = ? ORDER BY grp_group_id', [$form['formdir']]));
-            $headers = array_values(array_filter($layout, fn($row) => $row['grp_group_id'] === ''));
-            if (count($headers) !== 1 || !(int) $headers[0]['grp_activity']) {
+            // The table's primary key is (form id, group id), so a layout has at most one header row, group id ''.
+            if (!(int) (array_column($layout, 'grp_activity', 'grp_group_id')[''] ?? 0)) {
                 throw new OperationProblem(422, 'not-supported', 'A note layout is missing or inactive.');
             }
             // The only ACL check for these notes: display_layout_rows, which prints them, checks none.

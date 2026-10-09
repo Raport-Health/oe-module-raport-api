@@ -136,16 +136,7 @@ try {
     sqlStatement('UPDATE patient_data SET squad = ? WHERE pid = 930001', ['raport-restricted']);
     problemsCall($problemsToken, $p1, 403, 'PR13 patient squad');
 } finally {
-    if ($testAcl !== null && $testAcl !== false) {
-        $gacl->del_acl($testAcl);
-    }
-    if ($testGroup !== null) {
-        $gacl->del_group($testGroup, true, 'ARO');
-    }
-    foreach ($groups as $group) {
-        $gacl->add_group_object($group, 'users', 'oe-system', 'ARO');
-    }
-    $gacl->clear_cache();
+    restoreSystemAcl($gacl, $groups, $testAcl, $testGroup);
     sqlStatement('UPDATE globals SET gl_value = ? WHERE gl_name = ?', [$apiLogOption, 'api_log_option']);
     sqlStatement('DELETE FROM issue_encounter WHERE pid IN (930001, 930002) OR list_id BETWEEN 930001 AND 930010');
     sqlStatement('DELETE FROM lists WHERE id BETWEEN 930001 AND 930010 OR pid IN (930001, 930002)');

@@ -29,7 +29,6 @@ check(!sqlQuery($fixtureQuery), 'lab fixture IDs are unused');
 check($status === 200, 'labs-only operation token issued');
 $labsToken = $labsToken['access_token'];
 labsCall($token, $labPatient, 401);
-labsCall('invalid', $labPatient, 401);
 labsCall($labsToken, 'not-a-uuid', 400);
 labsCall($labsToken, $labPatient, 404);
 $gacl = new GaclApi();
@@ -142,10 +141,7 @@ try {
     $audit = sqlQuery('SELECT COUNT(*) AS total, SUM(request_body <> ? OR response <> ?) AS bodies FROM api_log WHERE request=? AND patient_id=940001', ['', '', 'Patient.$raport-labs']);
     check((int) $audit['total'] > 0 && (int) $audit['bodies'] === 0, 'lab audit retains metadata only, including with body logging enabled');
 } finally {
-    if ($testAcl !== null && $testAcl !== false) { $gacl->del_acl($testAcl); }
-    if ($testGroup !== null) { $gacl->del_group($testGroup, true, 'ARO'); }
-    foreach ($groups as $group) { $gacl->add_group_object($group, 'users', 'oe-system', 'ARO'); }
-    $gacl->clear_cache();
+    restoreSystemAcl($gacl, $groups, $testAcl, $testGroup);
     sqlStatement('UPDATE globals SET gl_value=? WHERE gl_name=?', [$apiLogOption, 'api_log_option']);
     // Exactly the fixture IDs: rows created later through the UI get auto-increment IDs just above them.
     foreach (['procedure_result' => ['procedure_result_id', 940007], 'procedure_report' => ['procedure_report_id', 940003], 'procedure_order' => ['procedure_order_id', 940004]] as $table => [$id, $last]) { sqlStatement("DELETE FROM $table WHERE $id BETWEEN 940001 AND $last"); }

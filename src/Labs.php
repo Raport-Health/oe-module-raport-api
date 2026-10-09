@@ -66,7 +66,7 @@ final class Labs
             $where .= ' AND po.procedure_order_id = ?';
             $binds[] = $orderId;
         }
-        $orders = QueryUtils::fetchRecords("SELECT po.*, fe.uuid AS encounter_uuid, fe.pid AS encounter_pid, fe.sensitivity, fe.pc_catid, pp.name AS lab_name, CONCAT_WS(' ', u.fname, u.mname, u.lname) AS provider_name FROM procedure_order po LEFT JOIN form_encounter fe ON fe.encounter = po.encounter_id LEFT JOIN procedure_providers pp ON pp.ppid = po.lab_id LEFT JOIN users u ON u.id = po.provider_id WHERE $where ORDER BY po.uuid", $binds);
+        $orders = QueryUtils::fetchRecords("SELECT po.*, fe.uuid AS encounter_uuid, fe.pid AS encounter_pid, fe.sensitivity, c.aco_spec, pp.name AS lab_name, CONCAT_WS(' ', u.fname, u.mname, u.lname) AS provider_name FROM procedure_order po LEFT JOIN form_encounter fe ON fe.encounter = po.encounter_id LEFT JOIN openemr_postcalendar_categories c ON c.pc_catid = fe.pc_catid LEFT JOIN procedure_providers pp ON pp.ppid = po.lab_id LEFT JOIN users u ON u.id = po.provider_id WHERE $where ORDER BY po.uuid", $binds);
         $codes = QueryUtils::fetchRecords("SELECT pc.* FROM procedure_order_code pc JOIN procedure_order po ON po.procedure_order_id = pc.procedure_order_id WHERE $where ORDER BY po.uuid, pc.procedure_order_seq", $binds);
         $answers = QueryUtils::fetchRecords("SELECT a.* FROM procedure_answers a JOIN procedure_order po ON po.procedure_order_id = a.procedure_order_id WHERE $where ORDER BY po.uuid, a.procedure_order_seq, a.question_code, a.answer_seq", $binds);
         $reports = QueryUtils::fetchRecords("SELECT pr.* FROM procedure_report pr JOIN procedure_order po ON po.procedure_order_id = pr.procedure_order_id WHERE $where ORDER BY pr.uuid", $binds);
@@ -87,7 +87,7 @@ final class Labs
                 if ($row['sensitivity']) {
                     $this->allow('sensitivities|' . $row['sensitivity'], $user);
                 }
-                $this->allow(AclMain::fetchPostCalendarCategoryACO($row['pc_catid']), $user);
+                $this->allow($row['aco_spec'], $user);
                 $parts[] = ['name' => 'encounter', 'valueString' => UuidRegistry::uuidToString($row['encounter_uuid'])];
             }
             $entries[] = ['name' => 'order', 'part' => $parts];

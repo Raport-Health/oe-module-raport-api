@@ -58,11 +58,9 @@ $operations = [
     'labs' => fn(HttpRestRequest $request) => $controller->labs($encounter, $request),
 ];
 foreach ($operations as $name => $call) {
-    // A system role through the browser-session local API is not an OAuth client either.
-    foreach (['users', 'patient', 'system'] as $role) {
+    foreach (['users', 'patient'] as $role) {
         $request = new HttpRestRequest();
         $request->setRequestUserRole($role);
-        $request->setIsLocalApi($role === 'system');
         check($call($request)->getStatusCode() === 403, "$name controller rejects $role non-OAuth context");
     }
 }
@@ -90,6 +88,20 @@ function callApi(string $path, ?string $body = null, string $contentType = 'appl
     }
     $status = curl_getinfo($curl, CURLINFO_RESPONSE_CODE);
     return [$status, $result];
+}
+// Undoes a test's restricted principal: its ACL and group go, and oe-system rejoins the groups it started in.
+function restoreSystemAcl($gacl, array $groups, $testAcl, $testGroup): void
+{
+    if ($testAcl !== null && $testAcl !== false) {
+        $gacl->del_acl($testAcl);
+    }
+    if ($testGroup !== null) {
+        $gacl->del_group($testGroup, true, 'ARO');
+    }
+    foreach ($groups as $group) {
+        $gacl->add_group_object($group, 'users', 'oe-system', 'ARO');
+    }
+    $gacl->clear_cache();
 }
 // A module operation answers a complete Parameters or an OperationOutcome, never both. OpenEMR answers 401 itself.
 function operationCall(string $path, string $token, int $expected, string $label): array

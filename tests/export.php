@@ -340,10 +340,7 @@ try {
     $audit = sqlQuery('SELECT COUNT(*) AS total, SUM(request_body <> ? OR response <> ?) AS bodies FROM api_log WHERE request = ? AND patient_id = 910001', ['', '', 'Encounter.$raport-document']);
     check((int)$audit['total'] > 0 && (int)$audit['bodies'] === 0, 'metadata audit retained without PDF/clinical response bodies');
 } finally {
-    if ($testAcl !== null && $testAcl !== false) { $gacl->del_acl($testAcl); }
-    if ($testGroup !== null) { $gacl->del_group($testGroup, true, 'ARO'); }
-    foreach ($groups as $group) { $gacl->add_group_object($group,'users','oe-system','ARO'); }
-    $gacl->clear_cache();
+    restoreSystemAcl($gacl, $groups, $testAcl, $testGroup);
     foreach ($globalsBefore as $name=>$value) { sqlStatement('UPDATE globals SET gl_value = ? WHERE gl_name = ?',[$value,$name]); }
     sqlStatement('DELETE FROM esign_signatures WHERE `table` = ? AND tid = 910001',['form_encounter']);
     foreach ($fixtures as $id) { sqlStatement('DELETE FROM esign_signatures WHERE `table` = ? AND tid = ?', ['forms',$id]); }

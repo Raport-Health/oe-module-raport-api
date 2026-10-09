@@ -228,16 +228,7 @@ try {
     sqlStatement('UPDATE openemr_postcalendar_categories SET aco_spec = ? WHERE pc_catid = 5', ['admin|super']);
     visitsCall($moduleToken, ['patient' => $p1], 403, 'V15 encounter category ACO');
 } finally {
-    if ($testAcl !== null && $testAcl !== false) {
-        $gacl->del_acl($testAcl);
-    }
-    if ($testGroup !== null) {
-        $gacl->del_group($testGroup, true, 'ARO');
-    }
-    foreach ($groups as $group) {
-        $gacl->add_group_object($group, 'users', 'oe-system', 'ARO');
-    }
-    $gacl->clear_cache();
+    restoreSystemAcl($gacl, $groups, $testAcl, $testGroup);
     sqlStatement('UPDATE globals SET gl_value = ? WHERE gl_name = ?', [$apiLogOption, 'api_log_option']);
     sqlStatement('UPDATE openemr_postcalendar_categories SET aco_spec = ? WHERE pc_catid = 5', [$category]);
     sqlStatement('DELETE FROM patient_tracker WHERE pid IN (920001, 920002)');

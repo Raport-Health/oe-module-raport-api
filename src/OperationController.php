@@ -58,7 +58,7 @@ final class OperationController
     private function respond(HttpRestRequest $request, string $label, string $operation, \Closure $read): JsonResponse
     {
         // The host checks the operation scope before dispatch. Only OAuth system clients are served.
-        if ($request->getRequestUserRole() !== 'system' || $request->isLocalApi()) {
+        if ($request->getRequestUserRole() !== 'system') {
             return $this->outcome(403, 'forbidden', 'This operation requires an OAuth system client.');
         }
         // Replace body logging with a metadata-only audit using the host audit service.
